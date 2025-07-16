@@ -239,7 +239,8 @@ def run_bot():
                     execute_trade(client, SYMBOL, current_signal)
                     last_signal = current_signal
 
-            now = datetime.datetime.utcnow()
+            # --- POPRAWKA: Użycie nowej, zalecanej metody pobierania czasu UTC ---
+            now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(INTERVAL)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
             seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 10
