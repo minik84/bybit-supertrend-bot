@@ -8,13 +8,13 @@ from termcolor import colored
 
 # === KONFIGURACJA ===
 # --- Wklej swój klucz API i Sekret ---
-API_KEY = "Y5fSDo7HjKenVmPkyn"
-API_SECRET = "R22kdwdD5yIxccWvpDLr7FZXpwxCir6hFw0Y"
+API_KEY = "pk3pm3ytYQfYq8Kbku"
+API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 # ------------------------------------
 
 # === USTAWIENIA STRATEGII ===
 BASE_URL = "https://api.bybit.com"
-SYMBOL = "CRVUSDT"
+SYMBOL = "WIFUSDT"
 LEVERAGE = "10"
 INTERVAL = "15" 
 
@@ -235,7 +235,7 @@ def run_bot():
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(INTERVAL)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
-            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 10
+            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5
             if seconds_to_wait > interval_minutes * 60: seconds_to_wait -= interval_minutes * 60
             print(colored(f"--- Czekam {int(seconds_to_wait)}s do następnej świecy {INTERVAL}m ---\n", "blue"), flush=True)
             time.sleep(seconds_to_wait)
