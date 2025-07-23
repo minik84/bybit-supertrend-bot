@@ -24,6 +24,7 @@ FACTOR = 3.0
 
 # --- USTAWIENIA ZARZĄDZANIA KAPITAŁEM ---
 RISK_PERCENTAGE = 5 
+TAKE_PROFIT_PERCENTAGE = 1.5 # Nowy parametr: zamykaj pozycję przy zysku >= 1.5%
 
 # === KLASA DO OBSŁUGI API BYBIT ===
 class BybitClient:
@@ -108,6 +109,7 @@ class BybitClient:
         except Exception: return 0
 
     def get_position(self, symbol):
+        """Pobiera pozycję i zwraca stronę, rozmiar oraz cenę wejścia."""
         endpoint = "/v5/position/list"
         params = {"category": "linear", "symbol": symbol}
         data = self._send_request("GET", endpoint, params)
@@ -115,12 +117,13 @@ class BybitClient:
             pos = data["result"]["list"][0]
             side = pos["side"] if float(pos["size"]) > 0 else "None"
             size = float(pos["size"])
-            return side, size
-        return "None", 0
+            avg_price = float(pos["avgPrice"]) if size > 0 else 0
+            return side, size, avg_price
+        return "None", 0, 0
 
     def place_order(self, symbol, side, qty, reduce_only=False):
         endpoint = "/v5/order/create"
-        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": str(qty), "reduceOnly": reduce_only}
+        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": str(qty), "reduce_only": reduce_only}
         print(colored(f"--- Składanie zlecenia: {params}", "yellow"), flush=True)
         return self._send_request("POST", endpoint, params)
 
@@ -186,8 +189,8 @@ def execute_trade(client, symbol, side):
 # === GŁÓWNA PĘTLA BOTA ===
 def run_bot():
     client = BybitClient(API_KEY, API_SECRET)
-    print(colored("Bot Supertrend (Logika Kivanc) uruchomiony!", "green"), flush=True)
-    print(f"Interwał: {INTERVAL}m, Ryzyko: {RISK_PERCENTAGE}%", flush=True)
+    print(colored("Bot Supertrend (Logika Kivanc + Take Profit) uruchomiony!", "green"), flush=True)
+    print(f"Interwał: {INTERVAL}m, Ryzyko: {RISK_PERCENTAGE}%, Take Profit: {TAKE_PROFIT_PERCENTAGE}%", flush=True)
 
     last_signal, leverage_set = None, False
     while True:
@@ -216,17 +219,36 @@ def run_bot():
                 last_signal = current_signal
                 print(colored(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Inicjalizacja. Główny sygnał to {current_signal}. Oczekuję na pierwszą zmianę trendu...", "blue"), flush=True)
             else:
-                position_side, position_size = client.get_position(SYMBOL)
+                position_side, position_size, avg_entry_price = client.get_position(SYMBOL)
+                
+                # --- NOWA LOGIKA: SPRAWDZANIE TAKE PROFIT ---
+                if position_size > 0:
+                    current_price = client.get_last_price(SYMBOL)
+                    if current_price > 0 and avg_entry_price > 0:
+                        if position_side == 'Buy':
+                            pnl_percent = ((current_price - avg_entry_price) / avg_entry_price) * 100
+                        else: # Sell
+                            pnl_percent = ((avg_entry_price - current_price) / avg_entry_price) * 100
+                        
+                        if pnl_percent >= TAKE_PROFIT_PERCENTAGE:
+                            print(colored(f"ZYSK OSIĄGNĄŁ {pnl_percent:.2f}%. Zamykanie pozycji (Take Profit)...", "green"), flush=True)
+                            close_side = "Buy" if position_side == "Sell" else "Sell"
+                            client.place_order(SYMBOL, close_side, position_size, reduce_only=True)
+                            time.sleep(5) # Czekaj na przetworzenie zlecenia
+                            # Po zamknięciu pozycji, pętla będzie kontynuowana, a bot poczeka na kolejną zmianę sygnału Supertrend
+                            continue # Przejdź do następnej iteracji, aby nie sprawdzać sygnału Supertrend w tej samej pętli
+
                 status_color = "green" if current_signal == "Buy" else "red"
                 print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ostatni sygnał: {last_signal} | Aktualny: {colored(current_signal, status_color)} | Pozycja: {colored(position_side, 'cyan')}, Rozmiar: {colored(position_size, 'cyan')}", flush=True)
                 
+                # --- LOGIKA STOP & REVERSE / WEJŚCIA ---
                 if current_signal != last_signal:
                     print(colored(f"Wykryto zmianę głównego trendu z {last_signal} na {current_signal}!", "magenta"), flush=True)
                     
                     if position_size > 0:
                         close_side = "Buy" if position_side == "Sell" else "Sell"
                         client.place_order(SYMBOL, close_side, position_size, reduce_only=True)
-                        print(colored("Pozycja zamknięta. Czekam 5s na przetworzenie.", "yellow"), flush=True)
+                        print(colored("Pozycja zamknięta (Stop & Reverse). Czekam 5s...", "yellow"), flush=True)
                         time.sleep(5)
                     
                     execute_trade(client, SYMBOL, current_signal)
