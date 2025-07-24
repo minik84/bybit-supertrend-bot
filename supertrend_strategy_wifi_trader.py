@@ -19,11 +19,11 @@ LEVERAGE = "10"
 BOT_CONFIGS = [
     {
         "symbol": "WIFUSDT",
-        "interval": "15",
+        "interval": "5",
         "atr_period": 10,
         "factor": 3.0,
         "risk_percentage": 5,
-        "take_profit_percentage": 1.5
+        "take_profit_percentage": 1.4
     },
     {
         "symbol": "1000PEPEUSDT",
