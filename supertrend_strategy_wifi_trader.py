@@ -34,7 +34,7 @@ BOT_CONFIGS = [
         "take_profit_percentage": 1.5
     },
     {
-        "symbol": "RENDERUDST",
+        "symbol": "RENDERUSDT",
         "interval": "15",
         "atr_period": 10,
         "factor": 3.0,
