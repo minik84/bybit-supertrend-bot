@@ -22,7 +22,7 @@ BOT_CONFIGS = [
         "interval": "15",
         "atr_period": 10,
         "factor": 3.0,
-        "risk_percentage": 2,
+        "risk_percentage": 5,
         "take_profit_percentage": 1.5
     },
     # {
