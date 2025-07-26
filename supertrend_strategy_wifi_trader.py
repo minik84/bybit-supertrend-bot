@@ -8,8 +8,10 @@ import threading
 from termcolor import colored
 
 # === KONFIGURACJA ===
+# --- Wklej swój klucz API i Sekret ---
 API_KEY = "pk3pm3ytYQfYq8Kbku"
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
+# ------------------------------------
 BASE_URL = "https://api.bybit.com"
 LEVERAGE = "10"
 
@@ -24,25 +26,10 @@ BOT_CONFIGS = [
         "factor": 3.0,
         "risk_percentage": 5,
         "take_profit_percentage": 1.5
-    },
-    # {
-    #     "symbol": "1000BONKUSDT",
-    #     "interval": "15",
-    #     "atr_period": 10,
-    #     "factor": 3.0,
-    #     "risk_percentage": 3,
-    #     "take_profit_percentage": 1.5
-    # },
-    # {
-    #     "symbol": "RENDERUSDT",
-    #     "interval": "15",
-    #     "atr_period": 10,
-    #     "factor": 3.0,
-    #     "risk_percentage": 3,
-    #     "take_profit_percentage": 1.5
-    # }
+    }
 ]
 # ==============================================================================
+
 
 # === KLASA DO OBSŁUGI API BYBIT ===
 class BybitClient:
@@ -84,12 +71,13 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
 
-            if data.get("retCode") != 0 and data.get("retCode") not in [110025, 110043]:
+            if data.get("retCode") != 0:
+                if data.get("retCode") in [110025, 110043]: return data
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
             return data
         except Exception as e:
-            print(colored(f"Błąd połączenia: {e}", "red"), flush=True)
+            print(colored(f"Błąd połączenia lub zapytania: {e}", "red"), flush=True)
             return None
 
     def get_klines(self, symbol, interval, limit=200):
@@ -112,6 +100,17 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
+    def get_last_price(self, symbol):
+        endpoint = "/v5/market/tickers"
+        params = {"category": "linear", "symbol": symbol}
+        try:
+            response = requests.get(self.base_url + endpoint, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("retCode") == 0 and data["result"]["list"]: return float(data["result"]["list"][0]["lastPrice"])
+            return 0
+        except Exception: return 0
+
     def get_position(self, symbol):
         endpoint = "/v5/position/list"
         params = {"category": "linear", "symbol": symbol}
@@ -126,9 +125,8 @@ class BybitClient:
 
     def place_order(self, symbol, side, qty, reduce_only=False):
         endpoint = "/v5/order/create"
-        qty_str = str(int(qty)) # Bybit prefers integer quantities for many pairs
-        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": qty_str, "reduceOnly": reduce_only}
-        print(colored(f"--- [{symbol}] Zlecenie: {params}", "yellow"), flush=True)
+        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": str(qty), "reduceOnly": reduce_only}
+        print(colored(f"--- [{symbol}] Składanie zlecenia: {params}", "yellow"), flush=True)
         return self._send_request("POST", endpoint, params)
 
     def set_leverage(self, symbol, leverage):
@@ -145,8 +143,9 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     src = [(h + l) / 2 for h, l in zip(highs, lows)]
 
-    true_ranges = [max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(closes))]
-    true_ranges.insert(0, 0)
+    true_ranges = [0.0] * len(closes)
+    for i in range(1, len(closes)):
+        true_ranges[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
 
     atr = [0.0] * len(closes)
     if len(closes) > period:
@@ -176,11 +175,13 @@ def calculate_supertrend_kivanc(data, period, factor):
 
 def execute_trade(client, config):
     balance = client.get_wallet_balance()
-    price = float(config['last_closed_price'])
+    price = client.get_last_price(config['symbol'])
     if balance > 0 and price > 0:
         notional_value = balance * float(LEVERAGE)
-        qty = int(round((notional_value / price) * (config['risk_percentage'] / 100)))
-        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
+        max_qty = notional_value / price
+        qty = int(round(max_qty * (config['risk_percentage'] / 100)))
+        
+        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Obliczona ilość: {qty} {config['symbol']}", "cyan"), flush=True)
         if qty > 0:
             return client.place_order(config['symbol'], config['current_signal'], qty)
     return None
@@ -191,74 +192,55 @@ def run_strategy_for_pair(config):
     symbol = config['symbol']
     interval = config['interval']
     
-    print(colored(f"[{symbol}] Bot uruchomiony!", "green"), flush=True)
+    print(colored(f"[{symbol}] Bot Supertrend (Logika Kivanc + TP) uruchomiony!", "green"), flush=True)
+    print(f"[{symbol}] Interwał: {interval}m, Ryzyko: {config['risk_percentage']}%, TP: {config['take_profit_percentage']}%", flush=True)
 
     last_signal, leverage_set = None, False
-    
     while True:
         try:
             if not leverage_set:
                 result = client.set_leverage(symbol, LEVERAGE)
                 if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
+                    print(colored(f"[{symbol}] Dźwignia zweryfikowana/ustawiona.", "green"), flush=True)
                     leverage_set = True
                 else:
-                    time.sleep(10); continue
+                    print(colored(f"[{symbol}] Nie udało się ustawić dźwigni. Próba za 10s...", "red"), flush=True)
+                    time.sleep(10)
+                    continue
             
-            # Pobierz surowe dane świec. Indeks [0] to świeca bieżąca, [1] to ostatnia zamknięta.
-            klines_raw = client.get_klines(symbol, interval, limit=config['atr_period'] + 50)
-            if not klines_raw or len(klines_raw) < config['atr_period'] + 2:
-                print(colored(f"[{symbol}] Nie udało się pobrać wystarczającej ilości danych. Czekam...", "yellow"), flush=True)
-                time.sleep(60); continue
+            # --- POPRAWKA: Pobieranie większej ilości danych dla precyzji wskaźnika ---
+            klines = client.get_klines(symbol, interval, limit=300)
+            if not klines or len(klines) < config['atr_period'] + 1:
+                time.sleep(60)
+                continue
             
-            # Użyj ceny zamknięcia ostatniej W PEŁNI ZAMKNIĘTEJ świecy do logiki Take Profit
-            last_closed_candle = klines_raw[1]
-            last_closed_price = float(last_closed_candle[4])
-            config['last_closed_price'] = last_closed_price
-            
-            # Odwróć listę do poprawnego obliczenia wskaźnika
-            klines = list(reversed(klines_raw))
+            klines.reverse() 
             
             signal_direction = calculate_supertrend_kivanc(klines, config['atr_period'], config['factor'])
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
 
-            position_side, position_size, avg_entry_price = client.get_position(symbol)
-
-            # --- NOWA LOGIKA: SPRAWDZANIE ZAMKNIĘTEJ POZYCJI PO TAKE PROFIT ---
-            # Jeśli nie mamy sygnału, ale jest pozycja, to znaczy, że czekamy na nową zmianę trendu po TP
-            if last_signal is None and position_size > 0:
-                print(colored(f"[{symbol}][{time.strftime('%H:%M:%S')}] Pozycja otwarta po TP. Czekam na nową zmianę sygnału...", "blue"), flush=True)
-                # Sprawdzamy tylko, czy sygnał Supertrend nie odwrócił się (jako stop-loss)
-                if current_signal != position_side:
-                     print(colored(f"[{symbol}] ZMIANA TRENDU podczas oczekiwania po TP. Zamykanie pozycji...", "magenta"), flush=True)
-                     close_side = "Buy" if position_side == "Sell" else "Sell"
-                     client.place_order(symbol, close_side, position_size, reduce_only=True)
-                     time.sleep(5)
-                # Czekamy na następną świecę
-                # (pozostała logika jest na końcu pętli)
-            
-            # --- STANDARDOWA LOGIKA ---
-            elif last_signal is None:
+            if last_signal is None:
                 last_signal = current_signal
-                print(colored(f"[{symbol}][{time.strftime('%H:%M:%S')}] Inicjalizacja. Sygnał: {current_signal}", "blue"), flush=True)
+                print(colored(f"[{symbol}][{time.strftime('%H:%M:%S')}] Inicjalizacja. Sygnał: {current_signal}. Czekam na zmianę...", "blue"), flush=True)
             else:
+                position_side, position_size, avg_entry_price = client.get_position(symbol)
+                
+                if position_size > 0:
+                    current_price = client.get_last_price(symbol)
+                    if current_price > 0 and avg_entry_price > 0:
+                        pnl_percent = ((current_price - avg_entry_price) / avg_entry_price) * 100 if position_side == 'Buy' else ((avg_entry_price - current_price) / avg_entry_price) * 100
+                        if pnl_percent >= config['take_profit_percentage']:
+                            print(colored(f"[{symbol}] ZYSK OSIĄGNĄŁ {pnl_percent:.2f}%. Zamykanie pozycji (TP)...", "green"), flush=True)
+                            close_side = "Buy" if position_side == "Sell" else "Sell"
+                            client.place_order(symbol, close_side, position_size, reduce_only=True)
+                            last_signal = None 
+                            time.sleep(5)
+                            continue
+
                 status_color = "green" if current_signal == "Buy" else "red"
                 print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni: {last_signal} | Aktualny: {colored(current_signal, status_color)} | Pozycja: {colored(position_side, 'cyan')}", flush=True)
                 
-                # --- LOGIKA TAKE PROFIT (OPARTA NA CENIE ZAMKNIĘCIA) ---
-                if position_size > 0:
-                    pnl_percent = ((last_closed_price - avg_entry_price) / avg_entry_price) * 100 if position_side == 'Buy' else ((avg_entry_price - last_closed_price) / avg_entry_price) * 100
-                    
-                    if pnl_percent >= config['take_profit_percentage']:
-                        print(colored(f"[{symbol}] ZYSK NA ZAMKNIĘCIU ŚWIECY OSIĄGNĄŁ {pnl_percent:.2f}%. Zamykanie pozycji (TP)...", "green"), flush=True)
-                        close_side = "Buy" if position_side == "Sell" else "Sell"
-                        client.place_order(symbol, close_side, position_size, reduce_only=True)
-                        last_signal = None # Resetuj sygnał, aby czekać na nową zmianę trendu
-                        time.sleep(5)
-                        # Przejdź do następnej iteracji, aby nie wykonywać dalszej logiki
-                        continue
-                
-                # --- LOGIKA STOP & REVERSE / WEJŚCIA ---
                 if current_signal != last_signal:
                     print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta"), flush=True)
                     
@@ -269,21 +251,21 @@ def run_strategy_for_pair(config):
                         time.sleep(5)
                     
                     execute_trade(client, config)
-
-            last_signal = current_signal
+                    last_signal = current_signal
 
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
             seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5
-            print(colored(f"--- [{symbol}] Główna pętla czeka {int(seconds_to_wait)}s ---\n", "blue"), flush=True)
+            if seconds_to_wait > interval_minutes * 60: seconds_to_wait -= interval_minutes * 60
+            print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
             time.sleep(seconds_to_wait)
         except Exception as e:
-            print(colored(f"[{symbol}] Błąd w głównej pętli: {e}", "red"), flush=True); time.sleep(60)
+            print(colored(f"[{symbol}] Błąd w pętli: {e}", "red"), flush=True); time.sleep(60)
 
 # === START BOTA ===
 if __name__ == "__main__":
-    if "TWOJ_API_KEY" in API_KEY or "TWOJ_API_SECRET" in API_SECRET:
+    if API_KEY == "TWOJ_API_KEY" or API_SECRET == "TWOJ_API_SECRET":
         print(colored("BŁĄD: Proszę ustawić API_KEY i API_SECRET w pliku!", "red"), flush=True)
     else:
         threads = []
@@ -292,7 +274,7 @@ if __name__ == "__main__":
             threads.append(thread)
             thread.start()
             print(f"Uruchomiono wątek dla {config['symbol']}")
-            time.sleep(3)
+            time.sleep(3) 
 
         for thread in threads:
             thread.join()
