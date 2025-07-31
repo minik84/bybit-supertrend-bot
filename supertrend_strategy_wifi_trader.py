@@ -24,7 +24,8 @@ BOT_CONFIGS = [
         "factor": 3.0,
         "risk_percentage": 5,
         "take_profit_percentage": 1.5, # Standardowy TP na zamknięciu świecy 15m
-        "aggressive_tp_percentage": 2.5 # Agresywny TP sprawdzany co 1m
+        "aggressive_tp_percentage": 2.5, # Agresywny TP sprawdzany co 1m
+        "aggressive_sl_percentage": 1.6  # Agresywny SL sprawdzany co 1m
     }
 ]
 # ==============================================================================
@@ -200,6 +201,15 @@ def monitor_position(client, config, trade_status):
             # Warunek 1: Agresywny Take Profit
             if pnl_percent >= config['aggressive_tp_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY TP OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "green"), flush=True)
+                close_side = "Buy" if position_side == "Sell" else "Sell"
+                client.place_order(symbol, close_side, position_size, reduce_only=True)
+                trade_status['is_open'] = False
+                trade_status['closed_by_monitor'] = True
+                break
+            
+            # Warunek 2: Agresywny Stop Loss
+            if pnl_percent <= -config['aggressive_sl_percentage']:
+                print(colored(f"[{symbol}] AGRESYWNY SL OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "red"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
                 client.place_order(symbol, close_side, position_size, reduce_only=True)
                 trade_status['is_open'] = False
