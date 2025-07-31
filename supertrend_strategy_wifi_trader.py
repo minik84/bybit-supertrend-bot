@@ -23,8 +23,9 @@ BOT_CONFIGS = [
         "atr_period": 10,
         "factor": 3.0,
         "risk_percentage": 5,
-        "take_profit_percentage": 1.5,
-        "aggressive_tp_percentage": 2.5 # Cel zysku sprawdzany co minutę
+        "take_profit_percentage": 1.5, # Standardowy TP na zamknięciu świecy 15m
+        "aggressive_tp_percentage": 2.5, # Agresywny TP sprawdzany co 1m
+        "aggressive_sl_percentage": 1.0  # Agresywny SL sprawdzany co 1m
     }
 ]
 # ==============================================================================
@@ -171,9 +172,9 @@ def execute_trade(client, config):
     return None
 
 # === PĘTLA MONITORUJĄCA (SZYBKA) ===
-def monitor_aggressive_tp(client, config, trade_status):
+def monitor_position(client, config, trade_status):
     symbol = config['symbol']
-    print(colored(f"[{symbol}] Uruchomiono szybki monitoring TP (co 1 minutę).", "cyan"), flush=True)
+    print(colored(f"[{symbol}] Uruchomiono szybki monitoring (co 1 minutę).", "cyan"), flush=True)
 
     while trade_status.get('is_open', False):
         try:
@@ -195,10 +196,20 @@ def monitor_aggressive_tp(client, config, trade_status):
 
             pnl_percent = ((last_closed_1m_price - avg_entry_price) / avg_entry_price) * 100 if position_side == 'Buy' else ((avg_entry_price - last_closed_1m_price) / avg_entry_price) * 100
 
-            print(colored(f"[{symbol}][1m Check] Aktualny PnL na zamknięciu: {pnl_percent:.2f}%", "grey"), flush=True)
+            print(colored(f"[{symbol}][1m Check] PnL na zamknięciu: {pnl_percent:.2f}%", "grey"), flush=True)
 
+            # Warunek 1: Agresywny Take Profit
             if pnl_percent >= config['aggressive_tp_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY TP OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "green"), flush=True)
+                close_side = "Buy" if position_side == "Sell" else "Sell"
+                client.place_order(symbol, close_side, position_size, reduce_only=True)
+                trade_status['is_open'] = False
+                trade_status['closed_by_monitor'] = True
+                break
+            
+            # Warunek 2: Agresywny Stop Loss
+            if pnl_percent <= -config['aggressive_sl_percentage']:
+                print(colored(f"[{symbol}] AGRESYWNY SL OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "red"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
                 client.place_order(symbol, close_side, position_size, reduce_only=True)
                 trade_status['is_open'] = False
@@ -209,7 +220,7 @@ def monitor_aggressive_tp(client, config, trade_status):
             print(colored(f"[{symbol}] Błąd w pętli monitorującej: {e}", "red"), flush=True)
             time.sleep(60)
     
-    print(colored(f"[{symbol}] Zakończono szybki monitoring TP.", "cyan"), flush=True)
+    print(colored(f"[{symbol}] Zakończono szybki monitoring.", "cyan"), flush=True)
 
 # === GŁÓWNA PĘTLA BOTA (DLA JEDNEJ PARY) ===
 def run_strategy_for_pair(config):
@@ -248,9 +259,9 @@ def run_strategy_for_pair(config):
             position_side, position_size, avg_entry_price = client.get_position(symbol)
 
             if position_size == 0 and trade_status['is_open']:
-                print(colored(f"[{symbol}] Pozycja zamknięta przez monitoring. Resetowanie stanu.", "blue"), flush=True)
                 trade_status['is_open'] = False
                 if trade_status['closed_by_monitor']:
+                    print(colored(f"[{symbol}] Pozycja zamknięta przez monitoring. Czekam na nową zmianę sygnału...", "blue"), flush=True)
                     last_signal = None 
                     trade_status['closed_by_monitor'] = False
 
@@ -297,7 +308,7 @@ def run_strategy_for_pair(config):
                     if new_pos_size > 0:
                         trade_status['is_open'] = True
                         trade_status['closed_by_monitor'] = False
-                        monitor_thread = threading.Thread(target=monitor_aggressive_tp, args=(client, config, trade_status))
+                        monitor_thread = threading.Thread(target=monitor_position, args=(client, config, trade_status))
                         monitor_thread.start()
 
             last_signal = current_signal
