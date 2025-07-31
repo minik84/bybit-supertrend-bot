@@ -26,7 +26,7 @@ BOT_CONFIGS = [
         "take_profit_percentage": 1.5,
         "aggressive_tp_percentage": 2.5,
         "aggressive_sl_percentage": 1.6,
-        "monitoring_interval_seconds": 30 # NOWY PARAMETR: Co ile sekund ma działać szybka pętla
+        "monitoring_interval_seconds": 30
     }
 ]
 # ==============================================================================
@@ -180,7 +180,6 @@ def monitor_position(client, config, trade_status):
 
     while trade_status.get('is_open', False):
         try:
-            # Użyj nowego parametru z konfiguracji
             time.sleep(monitoring_interval)
 
             if not trade_status.get('is_open', False):
@@ -191,7 +190,6 @@ def monitor_position(client, config, trade_status):
                 trade_status['is_open'] = False
                 break
 
-            # Zamiast pobierać świece, pobieramy aktualną cenę rynkową
             current_price = client.get_last_price(symbol)
             if current_price == 0:
                 continue
@@ -200,7 +198,6 @@ def monitor_position(client, config, trade_status):
 
             print(colored(f"[{symbol}][{monitoring_interval}s Check] Aktualny PnL: {pnl_percent:.2f}%", "grey"), flush=True)
 
-            # Warunek 1: Agresywny Take Profit
             if pnl_percent >= config['aggressive_tp_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY TP OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "green"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
@@ -209,7 +206,6 @@ def monitor_position(client, config, trade_status):
                 trade_status['closed_by_monitor'] = True
                 break
             
-            # Warunek 2: Agresywny Stop Loss
             if pnl_percent <= -config['aggressive_sl_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY SL OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "red"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
@@ -260,6 +256,15 @@ def run_strategy_for_pair(config):
 
             position_side, position_size, avg_entry_price = client.get_position(symbol)
 
+            # --- POPRAWKA: Uruchomienie monitoringu dla istniejącej pozycji ---
+            if position_size > 0 and not trade_status['is_open']:
+                print(colored(f"[{symbol}] Wykryto istniejącą pozycję. Uruchamianie pętli monitorującej...", "cyan"), flush=True)
+                trade_status['is_open'] = True
+                trade_status['closed_by_monitor'] = False
+                monitor_thread = threading.Thread(target=monitor_position, args=(client, config, trade_status))
+                monitor_thread.start()
+            # -----------------------------------------------------------
+
             if position_size == 0 and trade_status['is_open']:
                 trade_status['is_open'] = False
                 if trade_status['closed_by_monitor']:
@@ -307,7 +312,7 @@ def run_strategy_for_pair(config):
                     time.sleep(5)
                     
                     new_pos_side, new_pos_size, _ = client.get_position(symbol)
-                    if new_pos_size > 0:
+                    if new_pos_size > 0 and not trade_status['is_open']:
                         trade_status['is_open'] = True
                         trade_status['closed_by_monitor'] = False
                         monitor_thread = threading.Thread(target=monitor_position, args=(client, config, trade_status))
