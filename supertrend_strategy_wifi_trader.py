@@ -23,9 +23,10 @@ BOT_CONFIGS = [
         "atr_period": 10,
         "factor": 3.0,
         "risk_percentage": 5,
-        "take_profit_percentage": 1.5, # Standardowy TP na zamknięciu świecy 15m
-        "aggressive_tp_percentage": 2.5, # Agresywny TP sprawdzany co 1m
-        "aggressive_sl_percentage": 1.6  # Agresywny SL sprawdzany co 1m
+        "take_profit_percentage": 1.5,
+        "aggressive_tp_percentage": 2.5,
+        "aggressive_sl_percentage": 1.6,
+        "monitoring_interval_seconds": 30 # NOWY PARAMETR: Co ile sekund ma działać szybka pętla
     }
 ]
 # ==============================================================================
@@ -174,11 +175,13 @@ def execute_trade(client, config):
 # === PĘTLA MONITORUJĄCA (SZYBKA) ===
 def monitor_position(client, config, trade_status):
     symbol = config['symbol']
-    print(colored(f"[{symbol}] Uruchomiono szybki monitoring (co 1 minutę).", "cyan"), flush=True)
+    monitoring_interval = config['monitoring_interval_seconds']
+    print(colored(f"[{symbol}] Uruchomiono szybki monitoring (co {monitoring_interval} sekund).", "cyan"), flush=True)
 
     while trade_status.get('is_open', False):
         try:
-            time.sleep(60)
+            # Użyj nowego parametru z konfiguracji
+            time.sleep(monitoring_interval)
 
             if not trade_status.get('is_open', False):
                 break
@@ -188,15 +191,14 @@ def monitor_position(client, config, trade_status):
                 trade_status['is_open'] = False
                 break
 
-            klines_1m_raw = client.get_klines(symbol, "1", limit=2)
-            if not klines_1m_raw or len(klines_1m_raw) < 2:
+            # Zamiast pobierać świece, pobieramy aktualną cenę rynkową
+            current_price = client.get_last_price(symbol)
+            if current_price == 0:
                 continue
-            
-            last_closed_1m_price = float(klines_1m_raw[1][4])
 
-            pnl_percent = ((last_closed_1m_price - avg_entry_price) / avg_entry_price) * 100 if position_side == 'Buy' else ((avg_entry_price - last_closed_1m_price) / avg_entry_price) * 100
+            pnl_percent = ((current_price - avg_entry_price) / avg_entry_price) * 100 if position_side == 'Buy' else ((avg_entry_price - current_price) / avg_entry_price) * 100
 
-            print(colored(f"[{symbol}][1m Check] PnL na zamknięciu: {pnl_percent:.2f}%", "grey"), flush=True)
+            print(colored(f"[{symbol}][{monitoring_interval}s Check] Aktualny PnL: {pnl_percent:.2f}%", "grey"), flush=True)
 
             # Warunek 1: Agresywny Take Profit
             if pnl_percent >= config['aggressive_tp_percentage']:
@@ -218,7 +220,7 @@ def monitor_position(client, config, trade_status):
 
         except Exception as e:
             print(colored(f"[{symbol}] Błąd w pętli monitorującej: {e}", "red"), flush=True)
-            time.sleep(60)
+            time.sleep(monitoring_interval)
     
     print(colored(f"[{symbol}] Zakończono szybki monitoring.", "cyan"), flush=True)
 
