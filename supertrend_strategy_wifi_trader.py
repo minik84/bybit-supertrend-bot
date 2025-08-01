@@ -99,6 +99,19 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
+    # --- POPRAWKA: Przywrócenie brakującej funkcji ---
+    def get_last_price(self, symbol):
+        endpoint = "/v5/market/tickers"
+        params = {"category": "linear", "symbol": symbol}
+        try:
+            response = requests.get(self.base_url + endpoint, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("retCode") == 0 and data["result"]["list"]: return float(data["result"]["list"][0]["lastPrice"])
+            return 0
+        except Exception: return 0
+    # ----------------------------------------------------
+
     def get_position(self, symbol):
         endpoint = "/v5/position/list"
         params = {"category": "linear", "symbol": symbol}
@@ -256,14 +269,12 @@ def run_strategy_for_pair(config):
 
             position_side, position_size, avg_entry_price = client.get_position(symbol)
 
-            # --- POPRAWKA: Uruchomienie monitoringu dla istniejącej pozycji ---
             if position_size > 0 and not trade_status['is_open']:
                 print(colored(f"[{symbol}] Wykryto istniejącą pozycję. Uruchamianie pętli monitorującej...", "cyan"), flush=True)
                 trade_status['is_open'] = True
                 trade_status['closed_by_monitor'] = False
                 monitor_thread = threading.Thread(target=monitor_position, args=(client, config, trade_status))
                 monitor_thread.start()
-            # -----------------------------------------------------------
 
             if position_size == 0 and trade_status['is_open']:
                 trade_status['is_open'] = False
@@ -344,3 +355,4 @@ if __name__ == "__main__":
 
         for thread in threads:
             thread.join()
+
