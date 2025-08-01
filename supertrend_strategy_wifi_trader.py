@@ -99,7 +99,6 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
-    # --- POPRAWKA: Przywrócenie brakującej funkcji ---
     def get_last_price(self, symbol):
         endpoint = "/v5/market/tickers"
         params = {"category": "linear", "symbol": symbol}
@@ -110,7 +109,6 @@ class BybitClient:
             if data.get("retCode") == 0 and data["result"]["list"]: return float(data["result"]["list"][0]["lastPrice"])
             return 0
         except Exception: return 0
-    # ----------------------------------------------------
 
     def get_position(self, symbol):
         endpoint = "/v5/position/list"
@@ -355,4 +353,3 @@ if __name__ == "__main__":
 
         for thread in threads:
             thread.join()
-
