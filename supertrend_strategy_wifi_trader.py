@@ -24,8 +24,7 @@ BOT_CONFIGS = [
         "factor": 3.0,
         "risk_percentage": 5,
         "take_profit_percentage": 1.5,
-        "aggressive_tp_percentage": 2.5,
-        "aggressive_sl_percentage": 1.6,
+        "aggressive_tp_percentage": 3.0,
         "monitoring_interval_seconds": 30
     }
 ]
@@ -211,14 +210,6 @@ def monitor_position(client, config, trade_status):
 
             if pnl_percent >= config['aggressive_tp_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY TP OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "green"), flush=True)
-                close_side = "Buy" if position_side == "Sell" else "Sell"
-                client.place_order(symbol, close_side, position_size, reduce_only=True)
-                trade_status['is_open'] = False
-                trade_status['closed_by_monitor'] = True
-                break
-            
-            if pnl_percent <= -config['aggressive_sl_percentage']:
-                print(colored(f"[{symbol}] AGRESYWNY SL OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "red"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
                 client.place_order(symbol, close_side, position_size, reduce_only=True)
                 trade_status['is_open'] = False
