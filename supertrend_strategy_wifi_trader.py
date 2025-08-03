@@ -8,8 +8,7 @@ import threading
 from termcolor import colored
 
 # === KONFIGURACJA ===
-# Pamiętaj, aby zastąpić klucze swoimi własnymi
-API_KEY = "pk3pm3ytYQfYq8Kbku" 
+API_KEY = "pk3pm3ytYQfYq8Kbku"
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 BASE_URL = "https://api.bybit.com"
 LEVERAGE = "10"
@@ -23,9 +22,10 @@ BOT_CONFIGS = [
         "interval": "15",
         "atr_period": 10,
         "factor": 3.0,
-        "risk_percentage": 5, # Ryzykuj 5% kapitału na transakcję
+        "risk_percentage": 5,
         "take_profit_percentage": 1.5,
         "aggressive_tp_percentage": 3.0,
+        "aggressive_sl_percentage": 1.6,
         "monitoring_interval_seconds": 30
     }
 ]
@@ -99,17 +99,6 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
-    def get_last_price(self, symbol):
-        endpoint = "/v5/market/tickers"
-        params = {"category": "linear", "symbol": symbol}
-        try:
-            response = requests.get(self.base_url + endpoint, params=params)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("retCode") == 0 and data["result"]["list"]: return float(data["result"]["list"][0]["lastPrice"])
-            return 0
-        except Exception: return 0
-
     def get_position(self, symbol):
         endpoint = "/v5/position/list"
         params = {"category": "linear", "symbol": symbol}
@@ -124,14 +113,8 @@ class BybitClient:
 
     def place_order(self, symbol, side, qty, reduce_only=False):
         endpoint = "/v5/order/create"
-        params = {
-            "category": "linear", 
-            "symbol": symbol, 
-            "side": side, 
-            "orderType": "Market", 
-            "qty": str(qty), # API wymaga QTY jako string
-            "reduceOnly": reduce_only
-        }
+        qty_str = str(int(qty))
+        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": qty_str, "reduceOnly": reduce_only}
         print(colored(f"--- [{symbol}] Zlecenie: {params}", "yellow"), flush=True)
         return self._send_request("POST", endpoint, params)
 
@@ -160,7 +143,7 @@ def calculate_supertrend_kivanc(data, period, factor):
 
     if not any(atr) or len(atr) < period: return 0
 
-    up, dn = ([0.0] * len(data) for _ in range(2))
+    up, dn, trend = ([0.0] * len(data) for _ in range(3))
     trend = [1] * len(data)
 
     for i in range(period, len(data)):
@@ -178,28 +161,16 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     return trend[-1]
 
-# ==============================================================================
-# === KLUCZOWA POPRAWIONA FUNKCJA ===
-# ==============================================================================
 def execute_trade(client, config):
     balance = client.get_wallet_balance()
     price = float(config['last_closed_price'])
     if balance > 0 and price > 0:
-        # 1. Oblicz, ile kapitału ryzykujesz (margin dla tej transakcji)
-        margin_to_risk = balance * (config['risk_percentage'] / 100)
-        
-        # 2. Oblicz pełną wartość pozycji z dźwignią (wartość nominalna)
-        notional_value = margin_to_risk * float(LEVERAGE)
-        
-        # 3. Oblicz ilość jednostek na podstawie pełnej wartości pozycji
-        # WIFUSDT na Bybit wymaga całkowitej liczby jednostek
-        qty = int(round(notional_value / price))
-
-        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzykowany margin: {margin_to_risk:.2f} USDT. Notional: {notional_value:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
+        notional_value = balance * float(LEVERAGE)
+        qty = int(round((notional_value / price) * (config['risk_percentage'] / 100)))
+        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
         if qty > 0:
             return client.place_order(config['symbol'], config['current_signal'], qty)
     return None
-# ==============================================================================
 
 # === PĘTLA MONITORUJĄCA (SZYBKA) ===
 def monitor_position(client, config, trade_status):
@@ -229,6 +200,14 @@ def monitor_position(client, config, trade_status):
 
             if pnl_percent >= config['aggressive_tp_percentage']:
                 print(colored(f"[{symbol}] AGRESYWNY TP OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "green"), flush=True)
+                close_side = "Buy" if position_side == "Sell" else "Sell"
+                client.place_order(symbol, close_side, position_size, reduce_only=True)
+                trade_status['is_open'] = False
+                trade_status['closed_by_monitor'] = True
+                break
+            
+            if pnl_percent <= -config['aggressive_sl_percentage']:
+                print(colored(f"[{symbol}] AGRESYWNY SL OSIĄGNIĘTY ({pnl_percent:.2f}%). Zamykanie pozycji...", "red"), flush=True)
                 close_side = "Buy" if position_side == "Sell" else "Sell"
                 client.place_order(symbol, close_side, position_size, reduce_only=True)
                 trade_status['is_open'] = False
@@ -277,12 +256,14 @@ def run_strategy_for_pair(config):
 
             position_side, position_size, avg_entry_price = client.get_position(symbol)
 
+            # --- POPRAWKA: Uruchomienie monitoringu dla istniejącej pozycji ---
             if position_size > 0 and not trade_status['is_open']:
                 print(colored(f"[{symbol}] Wykryto istniejącą pozycję. Uruchamianie pętli monitorującej...", "cyan"), flush=True)
                 trade_status['is_open'] = True
                 trade_status['closed_by_monitor'] = False
                 monitor_thread = threading.Thread(target=monitor_position, args=(client, config, trade_status))
                 monitor_thread.start()
+            # -----------------------------------------------------------
 
             if position_size == 0 and trade_status['is_open']:
                 trade_status['is_open'] = False
