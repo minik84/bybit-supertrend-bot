@@ -8,7 +8,8 @@ import threading
 from termcolor import colored
 
 # === KONFIGURACJA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku"
+# Pamiętaj, aby zastąpić klucze swoimi własnymi
+API_KEY = "pk3pm3ytYQfYq8Kbku" 
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 BASE_URL = "https://api.bybit.com"
 LEVERAGE = "10"
@@ -22,7 +23,7 @@ BOT_CONFIGS = [
         "interval": "15",
         "atr_period": 10,
         "factor": 3.0,
-        "risk_percentage": 5,
+        "risk_percentage": 5, # Ryzykuj 5% kapitału na transakcję
         "take_profit_percentage": 1.5,
         "aggressive_tp_percentage": 3.0,
         "monitoring_interval_seconds": 30
@@ -123,8 +124,14 @@ class BybitClient:
 
     def place_order(self, symbol, side, qty, reduce_only=False):
         endpoint = "/v5/order/create"
-        qty_str = str(int(qty))
-        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": qty_str, "reduceOnly": reduce_only}
+        params = {
+            "category": "linear", 
+            "symbol": symbol, 
+            "side": side, 
+            "orderType": "Market", 
+            "qty": str(qty), # API wymaga QTY jako string
+            "reduceOnly": reduce_only
+        }
         print(colored(f"--- [{symbol}] Zlecenie: {params}", "yellow"), flush=True)
         return self._send_request("POST", endpoint, params)
 
@@ -153,7 +160,7 @@ def calculate_supertrend_kivanc(data, period, factor):
 
     if not any(atr) or len(atr) < period: return 0
 
-    up, dn, trend = ([0.0] * len(data) for _ in range(3))
+    up, dn = ([0.0] * len(data) for _ in range(2))
     trend = [1] * len(data)
 
     for i in range(period, len(data)):
@@ -171,16 +178,28 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     return trend[-1]
 
+# ==============================================================================
+# === KLUCZOWA POPRAWIONA FUNKCJA ===
+# ==============================================================================
 def execute_trade(client, config):
     balance = client.get_wallet_balance()
     price = float(config['last_closed_price'])
     if balance > 0 and price > 0:
-        notional_value = balance * float(LEVERAGE)
-        qty = int(round((notional_value / price) * (config['risk_percentage'] / 100)))
-        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
+        # 1. Oblicz, ile kapitału ryzykujesz (margin dla tej transakcji)
+        margin_to_risk = balance * (config['risk_percentage'] / 100)
+        
+        # 2. Oblicz pełną wartość pozycji z dźwignią (wartość nominalna)
+        notional_value = margin_to_risk * float(LEVERAGE)
+        
+        # 3. Oblicz ilość jednostek na podstawie pełnej wartości pozycji
+        # WIFUSDT na Bybit wymaga całkowitej liczby jednostek
+        qty = int(round(notional_value / price))
+
+        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzykowany margin: {margin_to_risk:.2f} USDT. Notional: {notional_value:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
         if qty > 0:
             return client.place_order(config['symbol'], config['current_signal'], qty)
     return None
+# ==============================================================================
 
 # === PĘTLA MONITORUJĄCA (SZYBKA) ===
 def monitor_position(client, config, trade_status):
