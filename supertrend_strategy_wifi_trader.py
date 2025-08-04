@@ -320,7 +320,7 @@ def run_strategy_for_pair(config):
 
 # === START BOTA ===
 if __name__ == "__main__":
-    if "pk3pm3ytYQfYq8Kbku" in API_KEY or "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR" in API_SECRET:
+    if "TWOJ_API_KEY" in API_KEY or "TWOJ_API_SECRET" in API_SECRET:
         print(colored("BŁĄD: Proszę ustawić prawdziwe wartości API_KEY i API_SECRET w pliku!", "red"), flush=True)
     else:
         threads = []
