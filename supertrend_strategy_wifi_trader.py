@@ -5,10 +5,10 @@ import requests
 import json
 import datetime
 import threading
+import math # Dodajemy bibliotekę math do obsługi zaokrągleń w dół
 from termcolor import colored
 
 # === KONFIGURACJA ===
-# Pamiętaj, aby zastąpić te wartości swoimi kluczami API!
 API_KEY = "pk3pm3ytYQfYq8Kbku" 
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 BASE_URL = "https://api.bybit.com"
@@ -25,14 +25,6 @@ BOT_CONFIGS = [
         "factor": 3.0,
         "risk_percentage": 5
     }
-    # Możesz dodać więcej konfiguracji dla innych par
-    # {
-    #     "symbol": "BTCUSDT",
-    #     "interval": "15",
-    #     "atr_period": 10,
-    #     "factor": 3.0,
-    #     "risk_percentage": 5
-    # }
 ]
 # ==============================================================================
 
@@ -76,7 +68,6 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
 
-            # Ignoruj błędy informujące o braku zmian (dźwignia) lub braku pozycji do zamknięcia.
             if data.get("retCode") != 0 and data.get("retCode") not in [110025, 110043]:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
@@ -89,7 +80,6 @@ class BybitClient:
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
         try:
-            # Użycie publicznego endpointu nie wymaga autoryzacji
             response = requests.get(self.base_url + endpoint, params=params)
             response.raise_for_status()
             data = response.json()
@@ -98,6 +88,25 @@ class BybitClient:
         except Exception as e:
             print(colored(f"Błąd pobierania klines: {e}", "red"), flush=True)
             return []
+            
+    # NOWA FUNKCJA DO POBIERANIA REGUŁ HANDLOWYCH
+    def get_instrument_info(self, symbol):
+        endpoint = "/v5/market/instruments-info"
+        params = {"category": "linear", "symbol": symbol}
+        try:
+            response = requests.get(self.base_url + endpoint, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("retCode") == 0 and data["result"]["list"]:
+                info = data["result"]["list"][0]
+                return {
+                    "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
+                    "qtyStep": float(info["lotSizeFilter"]["qtyStep"])
+                }
+            return None
+        except Exception as e:
+            print(colored(f"Błąd pobierania informacji o instrumencie: {e}", "red"), flush=True)
+            return None
 
     def get_wallet_balance(self):
         endpoint = "/v5/account/wallet-balance"
@@ -159,7 +168,7 @@ def calculate_supertrend_kivanc(data, period, factor):
     src = [(h + l) / 2 for h, l in zip(highs, lows)]
 
     true_ranges = [max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(closes))]
-    true_ranges.insert(0, 0) # Pierwszy TR jest zazwyczaj ignorowany lub równy H-L
+    true_ranges.insert(0, 0)
 
     atr = [0.0] * len(closes)
     if len(closes) > period:
@@ -170,7 +179,7 @@ def calculate_supertrend_kivanc(data, period, factor):
     if not any(atr) or len(atr) < period: return 0
 
     up, dn = ([0.0] * len(data) for _ in range(2))
-    trend = [1] * len(data) # Domyślny trend to wzrostowy
+    trend = [1] * len(data)
 
     for i in range(period, len(data)):
         up_basic = src[i] - (factor * atr[i])
@@ -187,18 +196,49 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     return trend[-1]
 
-def execute_trade(client, config):
+# PRZEBUDOWANA FUNKCJA DO SKŁADANIA ZLECEŃ
+def execute_trade(client, config, instrument_rules):
     balance = client.get_wallet_balance()
     price = client.get_last_price(config['symbol'])
-    if balance > 0 and price > 0:
-        margin_to_risk = balance * (config['risk_percentage'] / 100)
-        notional_value = margin_to_risk * float(LEVERAGE)
-        qty = round(notional_value / price, 3) # Zaokrąglenie do 3 miejsc po przecinku, dostosuj w razie potrzeby
+    
+    if not (balance > 0 and price > 0):
+        return None
 
-        print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzykowany margin: {margin_to_risk:.2f} USDT. Notional: {notional_value:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
-        if qty > 0:
-            return client.place_order(config['symbol'], config['current_signal'], qty)
+    min_qty = instrument_rules["minOrderQty"]
+    qty_step = instrument_rules["qtyStep"]
+
+    margin_to_risk = balance * (config['risk_percentage'] / 100)
+    notional_value = margin_to_risk * float(LEVERAGE)
+    
+    # Oblicz "surową" ilość
+    raw_qty = notional_value / price
+
+    # 1. Sprawdź, czy ilość jest powyżej minimum giełdy
+    if raw_qty < min_qty:
+        print(colored(f"[{config['symbol']}] BŁĄD: Obliczona ilość {raw_qty:.6f} jest mniejsza niż minimalna dozwolona ilość {min_qty}. Zwiększ kapitał lub procent ryzyka.", "red"), flush=True)
+        return None
+        
+    # 2. Dostosuj ilość do wymaganego kroku (qtyStep)
+    # Używamy math.floor, aby zaokrąglić w dół do najbliższej wielokrotności kroku
+    adjusted_qty = math.floor(raw_qty / qty_step) * qty_step
+    
+    # Konwersja do stringa z odpowiednią precyzją, aby uniknąć notacji naukowej
+    # Znajdujemy liczbę miejsc po przecinku w qty_step
+    if '.' in str(qty_step):
+        precision = len(str(qty_step).split('.')[1])
+    else:
+        precision = 0
+    final_qty_str = f"{adjusted_qty:.{precision}f}"
+
+
+    print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzyko: {margin_to_risk:.2f} USDT. Surowa ilość: {raw_qty:.4f}. Finalna ilość: {final_qty_str}", "cyan"), flush=True)
+    
+    # Upewniamy się, że finalna ilość nie jest zerowa po zaokrągleniu
+    if float(final_qty_str) > 0:
+        return client.place_order(config['symbol'], config['current_signal'], final_qty_str)
+    
     return None
+
 
 # === GŁÓWNA PĘTLA BOTA (DLA JEDNEJ PARY) ===
 def run_strategy_for_pair(config):
@@ -209,10 +249,23 @@ def run_strategy_for_pair(config):
     print(colored(f"[{symbol}] Bot Supertrend (Stop & Reverse) uruchomiony!", "green"), flush=True)
     print(f"[{symbol}] Interwał: {interval}m, Ryzyko: {config['risk_percentage']}%", flush=True)
 
-    last_signal, leverage_set = None, False
+    # MODYFIKACJA: Zmienne do przechowywania reguł i statusu inicjalizacji
+    last_signal, leverage_set, rules_fetched = None, False, False
+    instrument_rules = {}
 
     while True:
         try:
+            # Jednorazowe pobranie reguł handlowych dla symbolu na starcie
+            if not rules_fetched:
+                rules = client.get_instrument_info(symbol)
+                if rules:
+                    instrument_rules = rules
+                    rules_fetched = True
+                    print(colored(f"[{symbol}] Pomyślnie pobrano reguły handlowe: {instrument_rules}", "green"), flush=True)
+                else:
+                    print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Ponowna próba za 10s.", "red"), flush=True)
+                    time.sleep(10); continue
+            
             if not leverage_set:
                 result = client.set_leverage(symbol, LEVERAGE)
                 if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
@@ -221,56 +274,43 @@ def run_strategy_for_pair(config):
                 else:
                     time.sleep(10); continue
             
-            # --- KLUCZOWA ZMIANA: POBIERANIE I FILTROWANIE ŚWIEC ---
             klines_raw = client.get_klines(symbol, interval, limit=300)
-            # Potrzebujemy co najmniej okresu ATR + 2 świece do obliczeń
             if not klines_raw or len(klines_raw) < config['atr_period'] + 2:
                 print(colored(f"[{symbol}] Oczekuję na wystarczającą ilość danych historycznych...", "yellow"), flush=True)
                 time.sleep(60); continue
 
-            # API zwraca dane z najnowszą, NIEZAMKNIĘTĄ świecą na indeksie [0].
-            # Używamy wszystkich świec OPRÓCZ tej bieżącej, aby sygnał był stabilny.
             klines_closed = klines_raw[1:]
-            klines_closed.reverse() # Odwracamy listę, by najstarsza świeca była pierwsza
-
-            # Obliczenia wykonujemy tylko na zamkniętych świecach
+            klines_closed.reverse()
+            
             signal_direction = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
             
-            # --- KONIEC KLUCZOWEJ ZMIANY ---
-
             position_side, position_size, _ = client.get_position(symbol)
             status_color = "green" if current_signal == "Buy" else "red"
             print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni sygnał: {last_signal} | Aktualny sygnał: {colored(current_signal, status_color)} | Otwarta pozycja: {colored(position_side, 'cyan')} ({position_size})", flush=True)
             
-            # Jeśli `last_signal` nie jest jeszcze ustawiony (pierwsze uruchomienie), tylko go zapisujemy
             if last_signal is None:
                 last_signal = current_signal
                 print(colored(f"[{symbol}] Inicjalizacja. Pierwszy odczytany sygnał: {current_signal}. Oczekiwanie na zmianę.", "blue"), flush=True)
-            # Jeśli sygnał się zmienił, wykonujemy transakcję
             elif current_signal != last_signal:
                 print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
                 
-                # 1. Zamknij istniejącą pozycję, jeśli istnieje (logika Stop and Reverse)
                 if position_size > 0:
-                    # Strona zlecenia zamykającego jest przeciwna do strony pozycji
                     close_side = "Buy" if position_side == "Sell" else "Sell"
                     client.place_order(symbol, close_side, position_size, reduce_only=True)
                     print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
                     time.sleep(5)
                 
-                # 2. Otwórz nową pozycję zgodnie z nowym sygnałem
-                execute_trade(client, config)
+                # MODYFIKACJA: Przekazanie reguł do funkcji wykonującej transakcję
+                execute_trade(client, config, instrument_rules)
             
-            # Aktualizujemy ostatni sygnał
             last_signal = current_signal
 
-            # Oczekiwanie na kolejną świecę
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
-            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5 # +5s buforu
+            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5
             print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
             time.sleep(seconds_to_wait)
 
@@ -280,7 +320,7 @@ def run_strategy_for_pair(config):
 
 # === START BOTA ===
 if __name__ == "__main__":
-    if "TWOJ_API_KEY" in API_KEY or "TWOJ_API_SECRET" in API_SECRET:
+    if "pk3pm3ytYQfYq8Kbku" in API_KEY or "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR" in API_SECRET:
         print(colored("BŁĄD: Proszę ustawić prawdziwe wartości API_KEY i API_SECRET w pliku!", "red"), flush=True)
     else:
         threads = []
@@ -289,7 +329,7 @@ if __name__ == "__main__":
             threads.append(thread)
             thread.start()
             print(f"Uruchomiono wątek dla {config['symbol']}")
-            time.sleep(3) # Krótka przerwa między uruchamianiem kolejnych wątków
+            time.sleep(3)
 
         for thread in threads:
             thread.join()
