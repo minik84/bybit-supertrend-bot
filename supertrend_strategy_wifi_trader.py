@@ -8,7 +8,8 @@ import threading
 from termcolor import colored
 
 # === KONFIGURACJA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku"
+# Pamiętaj, aby zastąpić te wartości swoimi kluczami API!
+API_KEY = "pk3pm3ytYQfYq8Kbku" 
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 BASE_URL = "https://api.bybit.com"
 LEVERAGE = "10"
@@ -24,6 +25,14 @@ BOT_CONFIGS = [
         "factor": 3.0,
         "risk_percentage": 5
     }
+    # Możesz dodać więcej konfiguracji dla innych par
+    # {
+    #     "symbol": "BTCUSDT",
+    #     "interval": "15",
+    #     "atr_period": 10,
+    #     "factor": 3.0,
+    #     "risk_percentage": 5
+    # }
 ]
 # ==============================================================================
 
@@ -67,6 +76,7 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
 
+            # Ignoruj błędy informujące o braku zmian (dźwignia) lub braku pozycji do zamknięcia.
             if data.get("retCode") != 0 and data.get("retCode") not in [110025, 110043]:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
@@ -79,12 +89,15 @@ class BybitClient:
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
         try:
+            # Użycie publicznego endpointu nie wymaga autoryzacji
             response = requests.get(self.base_url + endpoint, params=params)
             response.raise_for_status()
             data = response.json()
             if data.get("retCode") == 0: return data["result"]["list"]
             return []
-        except Exception: return []
+        except Exception as e:
+            print(colored(f"Błąd pobierania klines: {e}", "red"), flush=True)
+            return []
 
     def get_wallet_balance(self):
         endpoint = "/v5/account/wallet-balance"
@@ -146,7 +159,7 @@ def calculate_supertrend_kivanc(data, period, factor):
     src = [(h + l) / 2 for h, l in zip(highs, lows)]
 
     true_ranges = [max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(closes))]
-    true_ranges.insert(0, 0)
+    true_ranges.insert(0, 0) # Pierwszy TR jest zazwyczaj ignorowany lub równy H-L
 
     atr = [0.0] * len(closes)
     if len(closes) > period:
@@ -157,7 +170,7 @@ def calculate_supertrend_kivanc(data, period, factor):
     if not any(atr) or len(atr) < period: return 0
 
     up, dn = ([0.0] * len(data) for _ in range(2))
-    trend = [1] * len(data)
+    trend = [1] * len(data) # Domyślny trend to wzrostowy
 
     for i in range(period, len(data)):
         up_basic = src[i] - (factor * atr[i])
@@ -180,7 +193,7 @@ def execute_trade(client, config):
     if balance > 0 and price > 0:
         margin_to_risk = balance * (config['risk_percentage'] / 100)
         notional_value = margin_to_risk * float(LEVERAGE)
-        qty = int(round(notional_value / price))
+        qty = round(notional_value / price, 3) # Zaokrąglenie do 3 miejsc po przecinku, dostosuj w razie potrzeby
 
         print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzykowany margin: {margin_to_risk:.2f} USDT. Notional: {notional_value:.2f} USDT. Obliczona ilość: {qty}", "cyan"), flush=True)
         if qty > 0:
@@ -189,81 +202,4 @@ def execute_trade(client, config):
 
 # === GŁÓWNA PĘTLA BOTA (DLA JEDNEJ PARY) ===
 def run_strategy_for_pair(config):
-    client = BybitClient(API_KEY, API_SECRET)
-    symbol = config['symbol']
-    interval = config['interval']
-    
-    print(colored(f"[{symbol}] Bot Supertrend (Stop & Reverse) uruchomiony!", "green"), flush=True)
-    print(f"[{symbol}] Interwał: {interval}m, Ryzyko: {config['risk_percentage']}%", flush=True)
-
-    last_signal, leverage_set = None, False
-    initialization_cycles = 0
-
-    while True:
-        try:
-            if not leverage_set:
-                result = client.set_leverage(symbol, LEVERAGE)
-                if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
-                    leverage_set = True
-                else:
-                    time.sleep(10); continue
-            
-            klines = client.get_klines(symbol, interval, limit=300)
-            if not klines or len(klines) < config['atr_period'] + 1:
-                time.sleep(60); continue
-            
-            klines.reverse() 
-            
-            signal_direction = calculate_supertrend_kivanc(klines, config['atr_period'], config['factor'])
-            current_signal = "Buy" if signal_direction == 1 else "Sell"
-            config['current_signal'] = current_signal
-
-            if initialization_cycles < 2:
-                last_signal = current_signal
-                initialization_cycles += 1
-                if initialization_cycles == 1:
-                    print(colored(f"[{symbol}][{time.strftime('%H:%M:%S')}] Cykl kalibracji 1/2. Odczytany sygnał: {current_signal}", "blue"), flush=True)
-                else:
-                    print(colored(f"[{symbol}][{time.strftime('%H:%M:%S')}] Cykl kalibracji 2/2. Ustabilizowany sygnał: {current_signal}. Bot gotowy.", "blue"), flush=True)
-            else:
-                position_side, position_size, _ = client.get_position(symbol)
-                status_color = "green" if current_signal == "Buy" else "red"
-                print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni: {last_signal} | Aktualny: {colored(current_signal, status_color)} | Pozycja: {colored(position_side, 'cyan')}", flush=True)
-                
-                if current_signal != last_signal:
-                    print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta"), flush=True)
-                    
-                    if position_size > 0:
-                        close_side = "Buy" if position_side == "Sell" else "Sell"
-                        client.place_order(symbol, close_side, position_size, reduce_only=True)
-                        print(colored(f"[{symbol}] Pozycja zamknięta (Stop & Reverse). Czekam 5s...", "yellow"), flush=True)
-                        time.sleep(5)
-                    
-                    execute_trade(client, config)
-                
-                last_signal = current_signal
-
-            now = datetime.datetime.now(datetime.timezone.utc)
-            interval_minutes = int(interval)
-            minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
-            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5
-            print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
-            time.sleep(seconds_to_wait)
-        except Exception as e:
-            print(colored(f"[{symbol}] Błąd w pętli: {e}", "red"), flush=True); time.sleep(60)
-
-# === START BOTA ===
-if __name__ == "__main__":
-    if "TWOJ_API_KEY" in API_KEY or "TWOJ_API_SECRET" in API_SECRET:
-        print(colored("BŁĄD: Proszę ustawić API_KEY i API_SECRET w pliku!", "red"), flush=True)
-    else:
-        threads = []
-        for config in BOT_CONFIGS:
-            thread = threading.Thread(target=run_strategy_for_pair, args=(config,))
-            threads.append(thread)
-            thread.start()
-            print(f"Uruchomiono wątek dla {config['symbol']}")
-            time.sleep(3)
-
-        for thread in threads:
-            thread.join()
+    client = BybitClient(API_KEY, API_SECRET
