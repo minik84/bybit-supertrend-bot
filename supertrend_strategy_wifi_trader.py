@@ -202,4 +202,94 @@ def execute_trade(client, config):
 
 # === GŁÓWNA PĘTLA BOTA (DLA JEDNEJ PARY) ===
 def run_strategy_for_pair(config):
-    client = BybitClient(API_KEY, API_SECRET
+    client = BybitClient(API_KEY, API_SECRET)
+    symbol = config['symbol']
+    interval = config['interval']
+    
+    print(colored(f"[{symbol}] Bot Supertrend (Stop & Reverse) uruchomiony!", "green"), flush=True)
+    print(f"[{symbol}] Interwał: {interval}m, Ryzyko: {config['risk_percentage']}%", flush=True)
+
+    last_signal, leverage_set = None, False
+
+    while True:
+        try:
+            if not leverage_set:
+                result = client.set_leverage(symbol, LEVERAGE)
+                if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
+                    leverage_set = True
+                    print(colored(f"[{symbol}] Dźwignia ustawiona pomyślnie.", "green"), flush=True)
+                else:
+                    time.sleep(10); continue
+            
+            # --- KLUCZOWA ZMIANA: POBIERANIE I FILTROWANIE ŚWIEC ---
+            klines_raw = client.get_klines(symbol, interval, limit=300)
+            # Potrzebujemy co najmniej okresu ATR + 2 świece do obliczeń
+            if not klines_raw or len(klines_raw) < config['atr_period'] + 2:
+                print(colored(f"[{symbol}] Oczekuję na wystarczającą ilość danych historycznych...", "yellow"), flush=True)
+                time.sleep(60); continue
+
+            # API zwraca dane z najnowszą, NIEZAMKNIĘTĄ świecą na indeksie [0].
+            # Używamy wszystkich świec OPRÓCZ tej bieżącej, aby sygnał był stabilny.
+            klines_closed = klines_raw[1:]
+            klines_closed.reverse() # Odwracamy listę, by najstarsza świeca była pierwsza
+
+            # Obliczenia wykonujemy tylko na zamkniętych świecach
+            signal_direction = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
+            current_signal = "Buy" if signal_direction == 1 else "Sell"
+            config['current_signal'] = current_signal
+            
+            # --- KONIEC KLUCZOWEJ ZMIANY ---
+
+            position_side, position_size, _ = client.get_position(symbol)
+            status_color = "green" if current_signal == "Buy" else "red"
+            print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni sygnał: {last_signal} | Aktualny sygnał: {colored(current_signal, status_color)} | Otwarta pozycja: {colored(position_side, 'cyan')} ({position_size})", flush=True)
+            
+            # Jeśli `last_signal` nie jest jeszcze ustawiony (pierwsze uruchomienie), tylko go zapisujemy
+            if last_signal is None:
+                last_signal = current_signal
+                print(colored(f"[{symbol}] Inicjalizacja. Pierwszy odczytany sygnał: {current_signal}. Oczekiwanie na zmianę.", "blue"), flush=True)
+            # Jeśli sygnał się zmienił, wykonujemy transakcję
+            elif current_signal != last_signal:
+                print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
+                
+                # 1. Zamknij istniejącą pozycję, jeśli istnieje (logika Stop and Reverse)
+                if position_size > 0:
+                    # Strona zlecenia zamykającego jest przeciwna do strony pozycji
+                    close_side = "Buy" if position_side == "Sell" else "Sell"
+                    client.place_order(symbol, close_side, position_size, reduce_only=True)
+                    print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
+                    time.sleep(5)
+                
+                # 2. Otwórz nową pozycję zgodnie z nowym sygnałem
+                execute_trade(client, config)
+            
+            # Aktualizujemy ostatni sygnał
+            last_signal = current_signal
+
+            # Oczekiwanie na kolejną świecę
+            now = datetime.datetime.now(datetime.timezone.utc)
+            interval_minutes = int(interval)
+            minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
+            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5 # +5s buforu
+            print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
+            time.sleep(seconds_to_wait)
+
+        except Exception as e:
+            print(colored(f"[{symbol}] KRYTYCZNY BŁĄD w głównej pętli: {e}", "red", attrs=['bold']), flush=True)
+            time.sleep(60)
+
+# === START BOTA ===
+if __name__ == "__main__":
+    if "pk3pm3ytYQfYq8Kbku" in API_KEY or "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR" in API_SECRET:
+        print(colored("BŁĄD: Proszę ustawić prawdziwe wartości API_KEY i API_SECRET w pliku!", "red"), flush=True)
+    else:
+        threads = []
+        for config in BOT_CONFIGS:
+            thread = threading.Thread(target=run_strategy_for_pair, args=(config,))
+            threads.append(thread)
+            thread.start()
+            print(f"Uruchomiono wątek dla {config['symbol']}")
+            time.sleep(3) # Krótka przerwa między uruchamianiem kolejnych wątków
+
+        for thread in threads:
+            thread.join()
