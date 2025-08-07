@@ -23,7 +23,14 @@ BOT_CONFIGS = [
         "interval": "15",
         "atr_period": 10,
         "factor": 3.0,
-        "risk_percentage": 5
+        "risk_percentage": 4
+    },
+    {
+        "symbol": "ONDOUSDT",
+        "interval": "15",
+        "atr_period": 10,
+        "factor": 3.0,
+        "risk_percentage": 4
     }
 ]
 # ==============================================================================
