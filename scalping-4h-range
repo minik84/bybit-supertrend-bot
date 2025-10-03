@@ -10,8 +10,8 @@ import pytz
 import threading
 
 # === KONFIGURACJA GŁÓWNA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku" 
-API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
+API_KEY = "TWOJ_API_KEY"
+API_SECRET = "TWOJ_API_SECRET"
 BASE_URL = "https://api.bybit.com"
 
 # ==============================================================================
@@ -19,8 +19,16 @@ BASE_URL = "https://api.bybit.com"
 # ==============================================================================
 BOT_CONFIGS = [
     {
-        "symbol": "BTCUSDT",
-        "leverage": "10",
+        "symbol": "RENDERUSDT",
+        "leverage": "5",
+        "risk_percentage": 0.5,
+        "tp_ratio": 2.0,
+        "range_interval": "240",
+        "trade_interval": "5"
+    },
+    {
+        "symbol": "SOLUSDT",
+        "leverage": "5",
         "risk_percentage": 0.5,
         "tp_ratio": 2.0,
         "range_interval": "240",
