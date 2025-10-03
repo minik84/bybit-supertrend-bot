@@ -177,6 +177,9 @@ def run_strategy(config):
     in_position = False
 
     ny_timezone = pytz.timezone("America/New_York")
+    
+    # ZMIANA: Dodajemy licznik, aby ograniczyć liczbę logów
+    log_counter = 0
 
     while True:
         try:
@@ -186,7 +189,6 @@ def run_strategy(config):
             if now_ny.day != last_range_day:
                 print(colored(f"\n[{symbol}] Nowy dzień w NY ({now_ny.strftime('%Y-%m-%d')}). Ustalanie nowego zakresu...", "blue"))
                 
-                # Warunek blokujący handel podczas formowania świecy
                 if now_ny.hour < 4:
                     print(colored(f"[{symbol}] Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
                     time.sleep(60)
@@ -204,7 +206,6 @@ def run_strategy(config):
                     if not in_position:
                         state = "AWAITING_BREAKOUT"
                         breakout_direction = None
-                    # ZMIANA: Ulepszone logowanie zakresu
                     print(colored(f"[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']))
                     print(colored(f"  - Top Range:    {range_high}", "green"))
                     print(colored(f"  - Bottom Range: {range_low}", "green"))
@@ -215,8 +216,11 @@ def run_strategy(config):
             position_size = client.get_position_size(symbol)
             if position_size > 0:
                 in_position = True
-                print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] W pozycji ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"), end='\r', flush=True)
-                time.sleep(15)
+                # ZMIANA: Drukujemy status pozycji tylko raz na minutę
+                if log_counter % 12 == 0:
+                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] W pozycji ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"))
+                log_counter += 1
+                time.sleep(5)
                 continue
             elif in_position and position_size == 0:
                 print(colored(f"\n[{symbol}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']))
@@ -232,7 +236,10 @@ def run_strategy(config):
                 last_closed_candle = klines_trade[0]
                 candle_high, candle_low, candle_close = float(last_closed_candle[2]), float(last_closed_candle[3]), float(last_closed_candle[4])
                 
-                print(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Skanowanie... | Cena: {candle_close} | Stan: {state}      ", end='\r', flush=True)
+                # ZMIANA: Drukujemy status skanowania tylko raz na minutę
+                if log_counter % 12 == 0:
+                    print(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Skanowanie... | Cena: {candle_close} | Stan: {state}")
+                log_counter += 1
 
                 if state == "AWAITING_BREAKOUT":
                     if candle_close > range_high:
