@@ -26,15 +26,6 @@ BOT_CONFIGS = [
         "range_interval": "240", # Interwał do wyznaczania zakresu (4h)
         "trade_interval": "5"    # Interwał do wyszukiwania sygnałów (5m)
     },
-    # Aby dodać kolejną parę, skopiuj powyższy blok i zmień "symbol", np.:
-    # {
-    #     "symbol": "ETHUSDT",
-    #     "leverage": "10",
-    #     "risk_percentage": 0.5,
-    #     "tp_ratio": 2.0,
-    #     "range_interval": "240",
-    #     "trade_interval": "5"
-    # },
 ]
 # ==============================================================================
 
@@ -146,10 +137,10 @@ class BybitClient:
             "takeProfit": str(take_profit)
         }
         side_colored = colored(side.upper(), "green" if side == "Buy" else "red")
-        print(colored(f"\n[{symbol}] Składanie zlecenia {side_colored}:", "yellow", attrs=['bold']))
-        print(colored(f"  - Ilość: {qty} {symbol[:-4]}", "yellow"))
-        print(colored(f"  - Stop Loss: {stop_loss}", "yellow"))
-        print(colored(f"  - Take Profit: {take_profit}", "yellow"))
+        print(colored(f"\n[{symbol}] Składanie zlecenia {side_colored}:", "yellow", attrs=['bold']), flush=True)
+        print(colored(f"  - Ilość: {qty} {symbol[:-4]}", "yellow"), flush=True)
+        print(colored(f"  - Stop Loss: {stop_loss}", "yellow"), flush=True)
+        print(colored(f"  - Take Profit: {take_profit}", "yellow"), flush=True)
         return self._send_request("POST", endpoint, params)
 
 def get_precision(step):
@@ -161,12 +152,12 @@ def run_strategy(config):
     client = BybitClient(API_KEY, API_SECRET)
     symbol = config['symbol']
     
-    print(colored(f"[{symbol}] Bot '4h Range Reversal' uruchomiony!", "green", attrs=['bold']))
-    print(colored(f"[{symbol}] Interwał handlowy: {config['trade_interval']}m | Czas: Nowy Jork (EST/EDT)", "blue"))
+    print(colored(f"[{symbol}] Bot '4h Range Reversal' uruchomiony!", "green", attrs=['bold']), flush=True)
+    print(colored(f"[{symbol}] Interwał handlowy: {config['trade_interval']}m | Czas: Nowy Jork (EST/EDT)", "blue"), flush=True)
     
     instrument_rules = client.get_instrument_info(symbol)
     if not instrument_rules:
-        print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Zatrzymuję wątek.", "red"))
+        print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Zatrzymuję wątek.", "red"), flush=True)
         return
     
     qty_precision = get_precision(instrument_rules['qtyStep'])
@@ -190,7 +181,7 @@ def run_strategy(config):
             if now_ny.day != last_range_day:
                 if now_ny.hour < 4:
                     if waiting_log_sent_for_day != now_ny.day:
-                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nowy dzień. Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nowy dzień. Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"), flush=True)
                         waiting_log_sent_for_day = now_ny.day
                     time.sleep(60)
                     continue
@@ -208,12 +199,12 @@ def run_strategy(config):
                     if not in_position:
                         state = "AWAITING_BREAKOUT"
                         breakout_direction = None
-                    print(colored(f"\n[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']))
-                    print(colored(f"  - Top Range:    {range_high}", "green"))
-                    print(colored(f"  - Bottom Range: {range_low}", "green"))
+                    print(colored(f"\n[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']), flush=True)
+                    print(colored(f"  - Top Range:    {range_high}", "green"), flush=True)
+                    print(colored(f"  - Bottom Range: {range_low}", "green"), flush=True)
                 else:
                     if not range_fetch_failed_log_sent:
-                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nie można pobrać danych 4h z API. Ponawiam próbę co 60 sekund...", "red"))
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nie można pobrać danych 4h z API. Ponawiam próbę co 60 sekund...", "red"), flush=True)
                         range_fetch_failed_log_sent = True
                     time.sleep(60)
                     continue
@@ -222,12 +213,12 @@ def run_strategy(config):
             if position_size > 0:
                 in_position = True
                 if not in_position_log_sent:
-                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja otwarta ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"))
+                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja otwarta ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"), flush=True)
                     in_position_log_sent = True
                 time.sleep(15)
                 continue
             elif in_position and position_size == 0:
-                print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']))
+                print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']), flush=True)
                 in_position = False
                 in_position_log_sent = False
                 state = "AWAITING_BREAKOUT"
@@ -244,10 +235,10 @@ def run_strategy(config):
                 if state == "AWAITING_BREAKOUT":
                     if candle_close > range_high:
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "UP", candle_high
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE GÓRĄ! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE GÓRĄ! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"), flush=True)
                     elif candle_close < range_low:
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "DOWN", candle_low
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE DOŁEM! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE DOŁEM! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"), flush=True)
                 
                 elif state == "AWAITING_REENTRY":
                     signal_confirmed = False
@@ -255,13 +246,13 @@ def run_strategy(config):
                         side, stop_loss, entry_price = "Sell", breakout_extreme_price, candle_close
                         take_profit = entry_price - (abs(entry_price - stop_loss) * config['tp_ratio'])
                         signal_confirmed = True
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał SHORT!", "red", attrs=['bold']))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał SHORT!", "red", attrs=['bold']), flush=True)
 
                     elif breakout_direction == "DOWN" and candle_close > range_low:
                         side, stop_loss, entry_price = "Buy", breakout_extreme_price, candle_close
                         take_profit = entry_price + (abs(entry_price - stop_loss) * config['tp_ratio'])
                         signal_confirmed = True
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał LONG!", "green", attrs=['bold']))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał LONG!", "green", attrs=['bold']), flush=True)
 
                     if signal_confirmed:
                         balance = client.get_wallet_balance()
@@ -285,7 +276,7 @@ def run_strategy(config):
             time.sleep(5)
 
         except Exception as e:
-            print(colored(f"\n[{symbol}] KRYTYCZNY BŁĄD w głównej pętli: {e}", "red", attrs=['bold']))
+            print(colored(f"\n[{symbol}] KRYTYCZNY BŁĄD w głównej pętli: {e}", "red", attrs=['bold']), flush=True)
             time.sleep(60)
 
 if __name__ == "__main__":
@@ -297,8 +288,10 @@ if __name__ == "__main__":
             thread = threading.Thread(target=run_strategy, args=(config,))
             threads.append(thread)
             thread.start()
-            print(colored(f"Uruchomiono wątek dla {config['symbol']}", "yellow"))
+            print(colored(f"Uruchomiono wątek dla {config['symbol']}", "yellow"), flush=True)
             time.sleep(5)
 
         for thread in threads:
             thread.join()
+
+                        
