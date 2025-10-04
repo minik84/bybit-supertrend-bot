@@ -23,8 +23,8 @@ BOT_CONFIGS = [
         "leverage": "10",
         "risk_percentage": 0.5,
         "tp_ratio": 2.0,
-        "range_interval": "240", # Interwał do wyznaczania zakresu (4h)
-        "trade_interval": "5"    # Interwał do wyszukiwania sygnałów (5m)
+        "range_interval": "240",
+        "trade_interval": "5"
     },
 ]
 # ==============================================================================
@@ -241,6 +241,11 @@ def run_strategy(config):
                         print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE DOŁEM! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"), flush=True)
                 
                 elif state == "AWAITING_REENTRY":
+                    if breakout_direction == "UP" and candle_high > breakout_extreme_price:
+                        breakout_extreme_price = candle_high
+                    elif breakout_direction == "DOWN" and candle_low < breakout_extreme_price:
+                        breakout_extreme_price = candle_low
+
                     signal_confirmed = False
                     if breakout_direction == "UP" and candle_close < range_high:
                         side, stop_loss, entry_price = "Sell", breakout_extreme_price, candle_close
@@ -263,14 +268,33 @@ def run_strategy(config):
                             state = "AWAITING_BREAKOUT"
                             continue
 
-                        qty = risk_amount / stop_loss_distance
-                        adjusted_qty = math.floor(qty / instrument_rules['qtyStep']) * instrument_rules['qtyStep']
+                        # === POCZĄTEK NOWEJ LOGIKI DOPASOWANIA WIELKOŚCI POZYCJI ===
+                        
+                        # 1. Oblicz idealną ilość na podstawie ryzyka
+                        qty_by_risk = risk_amount / stop_loss_distance
+                        
+                        # 2. Oblicz maksymalną możliwą ilość na podstawie salda
+                        leverage = float(config['leverage'])
+                        max_position_notional = balance * leverage
+                        max_qty_by_balance = max_position_notional / entry_price
+
+                        # 3. Wybierz mniejszą z tych dwóch wartości
+                        final_qty = min(qty_by_risk, max_qty_by_balance)
+
+                        # 4. Sprawdź, czy pozycja została zmniejszona i poinformuj o tym
+                        if final_qty < qty_by_risk:
+                            print(colored(f"[{symbol}] OSTRZEŻENIE: Niewystarczające środki do pokrycia ryzyka {config['risk_percentage']}%. Zmniejszono wielkość pozycji do maksymalnej możliwej.", "red"), flush=True)
+
+                        # === KONIEC NOWEJ LOGIKI ===
+
+                        adjusted_qty = math.floor(final_qty / instrument_rules['qtyStep']) * instrument_rules['qtyStep']
                         
                         if adjusted_qty >= instrument_rules['minOrderQty']:
                             final_qty_str = f"{adjusted_qty:.{qty_precision}f}"
                             client.place_order_with_sl_tp(symbol, side, final_qty_str, round(stop_loss, 4), round(take_profit, 4))
                             in_position = True
                         else:
+                            print(colored(f"[{symbol}] Ostateczna ilość ({adjusted_qty}) jest mniejsza niż minimalna. Zlecenie anulowane.", "red"), flush=True)
                             state = "AWAITING_BREAKOUT"
             
             time.sleep(5)
@@ -293,5 +317,3 @@ if __name__ == "__main__":
 
         for thread in threads:
             thread.join()
-
-                        
