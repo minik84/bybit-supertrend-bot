@@ -178,8 +178,9 @@ def run_strategy(config):
 
     ny_timezone = pytz.timezone("America/New_York")
     
-    # ZMIANA: Dodajemy licznik, aby ograniczyć liczbę logów
-    log_counter = 0
+    # ZMIANA: Flagi do obsługi jednorazowych logów
+    waiting_log_sent_for_day = None
+    in_position_log_sent = False
 
     while True:
         try:
@@ -187,11 +188,12 @@ def run_strategy(config):
             now_ny = now_utc.astimezone(ny_timezone)
             
             if now_ny.day != last_range_day:
-                print(colored(f"\n[{symbol}] Nowy dzień w NY ({now_ny.strftime('%Y-%m-%d')}). Ustalanie nowego zakresu...", "blue"))
-                
+                # ZMIANA: Log "oczekiwanie na świecę" jest teraz wysyłany tylko raz dziennie
                 if now_ny.hour < 4:
-                    print(colored(f"[{symbol}] Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
-                    time.sleep(60)
+                    if waiting_log_sent_for_day != now_ny.day:
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nowy dzień. Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
+                        waiting_log_sent_for_day = now_ny.day
+                    time.sleep(60) # Czekamy dłużej, bo nie ma potrzeby częstego sprawdzania
                     continue
 
                 start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -206,7 +208,7 @@ def run_strategy(config):
                     if not in_position:
                         state = "AWAITING_BREAKOUT"
                         breakout_direction = None
-                    print(colored(f"[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']))
+                    print(colored(f"\n[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']))
                     print(colored(f"  - Top Range:    {range_high}", "green"))
                     print(colored(f"  - Bottom Range: {range_low}", "green"))
                 else:
@@ -216,15 +218,16 @@ def run_strategy(config):
             position_size = client.get_position_size(symbol)
             if position_size > 0:
                 in_position = True
-                # ZMIANA: Drukujemy status pozycji tylko raz na minutę
-                if log_counter % 12 == 0:
-                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] W pozycji ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"))
-                log_counter += 1
-                time.sleep(5)
+                # ZMIANA: Log "w pozycji" jest wysyłany tylko raz po otwarciu pozycji
+                if not in_position_log_sent:
+                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja otwarta ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"))
+                    in_position_log_sent = True
+                time.sleep(15)
                 continue
             elif in_position and position_size == 0:
-                print(colored(f"\n[{symbol}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']))
+                print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']))
                 in_position = False
+                in_position_log_sent = False # Reset flagi
                 state = "AWAITING_BREAKOUT"
             
             if not in_position and state in ["AWAITING_BREAKOUT", "AWAITING_REENTRY"]:
@@ -236,18 +239,15 @@ def run_strategy(config):
                 last_closed_candle = klines_trade[0]
                 candle_high, candle_low, candle_close = float(last_closed_candle[2]), float(last_closed_candle[3]), float(last_closed_candle[4])
                 
-                # ZMIANA: Drukujemy status skanowania tylko raz na minutę
-                if log_counter % 12 == 0:
-                    print(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Skanowanie... | Cena: {candle_close} | Stan: {state}")
-                log_counter += 1
-
+                # ZMIANA: Usunięto cykliczny log "Skanowanie..."
+                
                 if state == "AWAITING_BREAKOUT":
                     if candle_close > range_high:
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "UP", candle_high
-                        print(colored(f"\n[{symbol}] WYBICIE GÓRĄ! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE GÓRĄ! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
                     elif candle_close < range_low:
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "DOWN", candle_low
-                        print(colored(f"\n[{symbol}] WYBICIE DOŁEM! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] WYBICIE DOŁEM! Zamknięcie: {candle_close}. Oczekuję na powrót.", "magenta"))
                 
                 elif state == "AWAITING_REENTRY":
                     signal_confirmed = False
@@ -255,13 +255,13 @@ def run_strategy(config):
                         side, stop_loss, entry_price = "Sell", breakout_extreme_price, candle_close
                         take_profit = entry_price - (abs(entry_price - stop_loss) * config['tp_ratio'])
                         signal_confirmed = True
-                        print(colored(f"\n[{symbol}] POWRÓT DO ZAKRESU! Potwierdzony sygnał SHORT!", "red", attrs=['bold']))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał SHORT!", "red", attrs=['bold']))
 
                     elif breakout_direction == "DOWN" and candle_close > range_low:
                         side, stop_loss, entry_price = "Buy", breakout_extreme_price, candle_close
                         take_profit = entry_price + (abs(entry_price - stop_loss) * config['tp_ratio'])
                         signal_confirmed = True
-                        print(colored(f"\n[{symbol}] POWRÓT DO ZAKRESU! Potwierdzony sygnał LONG!", "green", attrs=['bold']))
+                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał LONG!", "green", attrs=['bold']))
 
                     if signal_confirmed:
                         balance = client.get_wallet_balance()
