@@ -25,7 +25,16 @@ BOT_CONFIGS = [
         "tp_ratio": 2.0,
         "range_interval": "240", # Interwał do wyznaczania zakresu (4h)
         "trade_interval": "5"    # Interwał do wyszukiwania sygnałów (5m)
-    }
+    },
+    # Aby dodać kolejną parę, skopiuj powyższy blok i zmień "symbol", np.:
+    # {
+    #     "symbol": "ETHUSDT",
+    #     "leverage": "10",
+    #     "risk_percentage": 0.5,
+    #     "tp_ratio": 2.0,
+    #     "range_interval": "240",
+    #     "trade_interval": "5"
+    # },
 ]
 # ==============================================================================
 
@@ -68,8 +77,7 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
 
-            # Traktujemy kod 110043 (leverage not modified) jako sukces
-            if data.get("retCode") != 0 and data.get("retCode") != 110043:
+            if data.get("retCode") != 0:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
             return data
@@ -144,13 +152,6 @@ class BybitClient:
         print(colored(f"  - Take Profit: {take_profit}", "yellow"))
         return self._send_request("POST", endpoint, params)
 
-    def set_leverage(self, symbol, leverage):
-        endpoint = "/v5/position/set-leverage"
-        params = {"category": "linear", "symbol": symbol, "buyLeverage": leverage, "sellLeverage": leverage}
-        print(colored(f"--- [{symbol}] Ustawianie dźwigni na {leverage}x...", "cyan"), flush=True)
-        return self._send_request("POST", endpoint, params)
-
-
 def get_precision(step):
     if '.' in str(step):
         return len(str(step).split('.')[1])
@@ -162,10 +163,10 @@ def run_strategy(config):
     
     print(colored(f"[{symbol}] Bot '4h Range Reversal' uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał handlowy: {config['trade_interval']}m | Czas: Nowy Jork (EST/EDT)", "blue"))
-
-    client.set_leverage(symbol, config['leverage'])
+    
     instrument_rules = client.get_instrument_info(symbol)
     if not instrument_rules:
+        print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Zatrzymuję wątek.", "red"))
         return
     
     qty_precision = get_precision(instrument_rules['qtyStep'])
@@ -177,8 +178,9 @@ def run_strategy(config):
 
     ny_timezone = pytz.timezone("America/New_York")
     
-    log_counter = 0
+    waiting_log_sent_for_day = None
     in_position_log_sent = False
+    range_fetch_failed_log_sent = False
 
     while True:
         try:
@@ -187,20 +189,19 @@ def run_strategy(config):
             
             if now_ny.day != last_range_day:
                 if now_ny.hour < 4:
-                    if log_counter % 10 == 0: # Log "heartbeat" co 10 minut
-                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Oczekiwanie na zamknięcie świecy 4h. Aktualna godzina w NY: {now_ny.strftime('%H:%M')}", "yellow"))
-                    log_counter += 1
+                    if waiting_log_sent_for_day != now_ny.day:
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nowy dzień. Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
+                        waiting_log_sent_for_day = now_ny.day
                     time.sleep(60)
                     continue
-                
-                log_counter = 0
-                
+
                 start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_of_ny_day_utc_ms = int(start_of_ny_day.timestamp() * 1000)
 
                 range_klines = client.get_klines(symbol, config['range_interval'], limit=1, start=start_of_ny_day_utc_ms)
                 
                 if range_klines:
+                    range_fetch_failed_log_sent = False
                     range_high = float(range_klines[0][2])
                     range_low = float(range_klines[0][3])
                     last_range_day = now_ny.day
@@ -211,6 +212,9 @@ def run_strategy(config):
                     print(colored(f"  - Top Range:    {range_high}", "green"))
                     print(colored(f"  - Bottom Range: {range_low}", "green"))
                 else:
+                    if not range_fetch_failed_log_sent:
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nie można pobrać danych 4h z API. Ponawiam próbę co 60 sekund...", "red"))
+                        range_fetch_failed_log_sent = True
                     time.sleep(60)
                     continue
 
@@ -298,4 +302,3 @@ if __name__ == "__main__":
 
         for thread in threads:
             thread.join()
-                           
