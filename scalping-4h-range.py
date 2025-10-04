@@ -10,7 +10,7 @@ import pytz
 import threading
 
 # === KONFIGURACJA GŁÓWNA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku" 
+API_KEY = "pk3pm3ytYQfYq8Kbku"
 API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
 BASE_URL = "https://api.bybit.com"
 
@@ -23,14 +23,13 @@ BOT_CONFIGS = [
         "leverage": "10",
         "risk_percentage": 0.5,
         "tp_ratio": 2.0,
-        "range_interval": "240",
-        "trade_interval": "5"
+        "range_interval": "240", # Interwał do wyznaczania zakresu (4h)
+        "trade_interval": "5"    # Interwał do wyszukiwania sygnałów (5m)
     }
 ]
 # ==============================================================================
 
 class BybitClient:
-    # ... (Ta klasa pozostaje bez zmian)
     def __init__(self, api_key, api_secret):
         self.api_key = api_key
         self.api_secret = api_secret
@@ -69,7 +68,8 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
 
-            if data.get("retCode") != 0:
+            # Traktujemy kod 110043 (leverage not modified) jako sukces
+            if data.get("retCode") != 0 and data.get("retCode") != 110043:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
             return data
@@ -137,7 +137,6 @@ class BybitClient:
             "stopLoss": str(stop_loss),
             "takeProfit": str(take_profit)
         }
-        # ZMIANA: Ulepszone logowanie zlecenia
         side_colored = colored(side.upper(), "green" if side == "Buy" else "red")
         print(colored(f"\n[{symbol}] Składanie zlecenia {side_colored}:", "yellow", attrs=['bold']))
         print(colored(f"  - Ilość: {qty} {symbol[:-4]}", "yellow"))
@@ -178,8 +177,7 @@ def run_strategy(config):
 
     ny_timezone = pytz.timezone("America/New_York")
     
-    # ZMIANA: Flagi do obsługi jednorazowych logów
-    waiting_log_sent_for_day = None
+    log_counter = 0
     in_position_log_sent = False
 
     while True:
@@ -188,14 +186,15 @@ def run_strategy(config):
             now_ny = now_utc.astimezone(ny_timezone)
             
             if now_ny.day != last_range_day:
-                # ZMIANA: Log "oczekiwanie na świecę" jest teraz wysyłany tylko raz dziennie
                 if now_ny.hour < 4:
-                    if waiting_log_sent_for_day != now_ny.day:
-                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nowy dzień. Oczekiwanie na zamknięcie świecy 4h (do 04:00 NY Time)...", "yellow"))
-                        waiting_log_sent_for_day = now_ny.day
-                    time.sleep(60) # Czekamy dłużej, bo nie ma potrzeby częstego sprawdzania
+                    if log_counter % 10 == 0: # Log "heartbeat" co 10 minut
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Oczekiwanie na zamknięcie świecy 4h. Aktualna godzina w NY: {now_ny.strftime('%H:%M')}", "yellow"))
+                    log_counter += 1
+                    time.sleep(60)
                     continue
-
+                
+                log_counter = 0
+                
                 start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_of_ny_day_utc_ms = int(start_of_ny_day.timestamp() * 1000)
 
@@ -218,7 +217,6 @@ def run_strategy(config):
             position_size = client.get_position_size(symbol)
             if position_size > 0:
                 in_position = True
-                # ZMIANA: Log "w pozycji" jest wysyłany tylko raz po otwarciu pozycji
                 if not in_position_log_sent:
                     print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja otwarta ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"))
                     in_position_log_sent = True
@@ -227,7 +225,7 @@ def run_strategy(config):
             elif in_position and position_size == 0:
                 print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']))
                 in_position = False
-                in_position_log_sent = False # Reset flagi
+                in_position_log_sent = False
                 state = "AWAITING_BREAKOUT"
             
             if not in_position and state in ["AWAITING_BREAKOUT", "AWAITING_REENTRY"]:
@@ -238,8 +236,6 @@ def run_strategy(config):
 
                 last_closed_candle = klines_trade[0]
                 candle_high, candle_low, candle_close = float(last_closed_candle[2]), float(last_closed_candle[3]), float(last_closed_candle[4])
-                
-                # ZMIANA: Usunięto cykliczny log "Skanowanie..."
                 
                 if state == "AWAITING_BREAKOUT":
                     if candle_close > range_high:
@@ -302,3 +298,4 @@ if __name__ == "__main__":
 
         for thread in threads:
             thread.join()
+                           
