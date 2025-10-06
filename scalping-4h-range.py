@@ -24,7 +24,9 @@ BOT_CONFIGS = [
         "risk_percentage": 0.5,
         "tp_ratio": 2.0,
         "range_interval": "240",
-        "trade_interval": "5"
+        "trade_interval": "5",
+        "use_break_even": True,     # NOWA FUNKCJA: Przesuń SL na cenę wejścia przy 1:1 R:R
+        "use_smart_sl": False,      # NOWA FUNKCJA: Użyj ciaśniejszego SL opartego o strukturę rynku
     },
 ]
 # ==============================================================================
@@ -49,25 +51,12 @@ class BybitClient:
 
         to_sign = timestamp + self.api_key + recv_window + payload_str
         signature = hmac.new(self.api_secret.encode('utf-8'), to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
-
-        headers = {
-            'X-BAPI-API-KEY': self.api_key,
-            'X-BAPI-SIGN': signature,
-            'X-BAPI-TIMESTAMP': timestamp,
-            'X-BAPI-RECV-WINDOW': recv_window,
-            'Content-Type': 'application/json'
-        }
+        headers = {'X-BAPI-API-KEY': self.api_key, 'X-BAPI-SIGN': signature, 'X-BAPI-TIMESTAMP': timestamp, 'X-BAPI-RECV-WINDOW': recv_window, 'Content-Type': 'application/json'}
 
         try:
-            if method == "POST":
-                response = self.session.post(url, headers=headers, data=payload_str)
-            else:
-                del headers['Content-Type']
-                response = self.session.get(url, headers=headers, params=params)
-            
+            response = self.session.request(method, url, headers=headers, data=payload_str if method == "POST" else None, params=params if method != "POST" else None)
             response.raise_for_status()
             data = response.json()
-
             if data.get("retCode") != 0:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
@@ -79,13 +68,13 @@ class BybitClient:
     def get_klines(self, symbol, interval, limit=200, start=None):
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
-        if start:
-            params['start'] = start
+        if start: params['start'] = start
+        
         try:
             response = requests.get(self.base_url + endpoint, params=params)
             response.raise_for_status()
             data = response.json()
-            if data.get("retCode") == 0: 
+            if data.get("retCode") == 0:
                 klines = data["result"]["list"]
                 klines.reverse()
                 return klines
@@ -93,6 +82,34 @@ class BybitClient:
         except Exception as e:
             print(colored(f"Błąd pobierania klines: {e}", "red"), flush=True)
             return []
+            
+    def get_current_price(self, symbol):
+        endpoint = "/v5/market/tickers"
+        params = {"category": "linear", "symbol": symbol}
+        data = self._send_request("GET", endpoint, params)
+        if data and data.get("result", {}).get("list"):
+            return float(data["result"]["list"][0]["lastPrice"])
+        return None
+
+    def get_position_info(self, symbol):
+        endpoint = "/v5/position/list"
+        params = {"category": "linear", "symbol": symbol}
+        data = self._send_request("GET", endpoint, params)
+        if data and data.get("result", {}).get("list"):
+            for pos in data["result"]["list"]:
+                if pos['symbol'] == symbol and float(pos.get("size", 0)) > 0:
+                    return {
+                        "size": float(pos["size"]),
+                        "entry_price": float(pos["avgPrice"]),
+                        "side": pos["side"]
+                    }
+        return None
+        
+    def modify_position_sl(self, symbol, stop_loss):
+        endpoint = "/v5/position/set-trading-stop"
+        params = {"category": "linear", "symbol": symbol, "stopLoss": str(stop_loss)}
+        print(colored(f"[{symbol}] Modyfikacja Stop Lossa na: {stop_loss}", "blue"), flush=True)
+        return self._send_request("POST", endpoint, params)
 
     def get_instrument_info(self, symbol):
         endpoint = "/v5/market/instruments-info"
@@ -100,10 +117,7 @@ class BybitClient:
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             info = data["result"]["list"][0]["lotSizeFilter"]
-            return {
-                "minOrderQty": float(info["minOrderQty"]),
-                "qtyStep": float(info["qtyStep"])
-            }
+            return {"minOrderQty": float(info["minOrderQty"]), "qtyStep": float(info["qtyStep"])}
         return None
 
     def get_wallet_balance(self, coin="USDT"):
@@ -115,27 +129,9 @@ class BybitClient:
                 if c["coin"] == coin: return float(c["walletBalance"])
         return 0
 
-    def get_position_size(self, symbol):
-        endpoint = "/v5/position/list"
-        params = {"category": "linear", "symbol": symbol}
-        data = self._send_request("GET", endpoint, params)
-        if data and data.get("result") and data["result"]["list"]:
-            for pos in data["result"]["list"]:
-                if pos['symbol'] == symbol:
-                    return float(pos.get("size", 0))
-        return 0
-    
     def place_order_with_sl_tp(self, symbol, side, qty, stop_loss, take_profit):
         endpoint = "/v5/order/create"
-        params = {
-            "category": "linear", 
-            "symbol": symbol, 
-            "side": side, 
-            "orderType": "Market", 
-            "qty": str(qty),
-            "stopLoss": str(stop_loss),
-            "takeProfit": str(take_profit)
-        }
+        params = {"category": "linear", "symbol": symbol, "side": side, "orderType": "Market", "qty": str(qty), "stopLoss": str(stop_loss), "takeProfit": str(take_profit)}
         side_colored = colored(side.upper(), "green" if side == "Buy" else "red")
         print(colored(f"\n[{symbol}] Składanie zlecenia {side_colored}:", "yellow", attrs=['bold']), flush=True)
         print(colored(f"  - Ilość: {qty} {symbol[:-4]}", "yellow"), flush=True)
@@ -144,33 +140,52 @@ class BybitClient:
         return self._send_request("POST", endpoint, params)
 
 def get_precision(step):
-    if '.' in str(step):
-        return len(str(step).split('.')[1])
-    return 0
+    return len(str(step).split('.')[1]) if '.' in str(step) else 0
+
+def find_smart_sl_level(klines, direction, extreme_price):
+    relevant_klines = klines[-10:] # Analizuj ostatnie 10 świec
+    if direction == "DOWN": # Szukamy wsparcia (dla Long)
+        for i in range(len(relevant_klines) - 2, 0, -1):
+            prev_low = float(relevant_klines[i-1][3])
+            curr_low = float(relevant_klines[i][3])
+            next_low = float(relevant_klines[i+1][3])
+            if curr_low < prev_low and curr_low < next_low: # Prosty "swing low"
+                # Upewnij się, że znaleziony poziom jest logiczny
+                if curr_low > extreme_price:
+                    return curr_low
+    elif direction == "UP": # Szukamy oporu (dla Short)
+        for i in range(len(relevant_klines) - 2, 0, -1):
+            prev_high = float(relevant_klines[i-1][2])
+            curr_high = float(relevant_klines[i][2])
+            next_high = float(relevant_klines[i+1][2])
+            if curr_high > prev_high and curr_high > next_high: # Prosty "swing high"
+                if curr_high < extreme_price:
+                    return curr_high
+    return extreme_price # Zwróć domyślny SL, jeśli nie znaleziono lepszego
 
 def run_strategy(config):
     client = BybitClient(API_KEY, API_SECRET)
     symbol = config['symbol']
     
     print(colored(f"[{symbol}] Bot '4h Range Reversal' uruchomiony!", "green", attrs=['bold']), flush=True)
-    print(colored(f"[{symbol}] Interwał handlowy: {config['trade_interval']}m | Czas: Nowy Jork (EST/EDT)", "blue"), flush=True)
+    print(colored(f"[{symbol}] Funkcje zaawansowane: Break-Even={'Włączone' if config['use_break_even'] else 'Wyłączone'}, Smart SL={'Włączone' if config['use_smart_sl'] else 'Wyłączone'}", "blue"), flush=True)
     
     instrument_rules = client.get_instrument_info(symbol)
     if not instrument_rules:
-        print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Zatrzymuję wątek.", "red"), flush=True)
         return
     
     qty_precision = get_precision(instrument_rules['qtyStep'])
-
+    
+    # Zmienne stanu
     range_high, range_low, last_range_day = None, None, None
     state = "AWAITING_RANGE"
     breakout_direction, breakout_extreme_price = None, None
-    in_position = False
-
-    ny_timezone = pytz.timezone("America/New_York")
     
+    # Zmienne zarządzania pozycją
+    trade_info = {}
+    
+    ny_timezone = pytz.timezone("America/New_York")
     waiting_log_sent_for_day = None
-    in_position_log_sent = False
     range_fetch_failed_log_sent = False
 
     while True:
@@ -178,6 +193,7 @@ def run_strategy(config):
             now_utc = datetime.datetime.now(pytz.utc)
             now_ny = now_utc.astimezone(ny_timezone)
             
+            # --- Ustalanie zakresu ---
             if now_ny.day != last_range_day:
                 if now_ny.hour < 4:
                     if waiting_log_sent_for_day != now_ny.day:
@@ -188,48 +204,52 @@ def run_strategy(config):
 
                 start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_of_ny_day_utc_ms = int(start_of_ny_day.timestamp() * 1000)
-
                 range_klines = client.get_klines(symbol, config['range_interval'], limit=1, start=start_of_ny_day_utc_ms)
                 
                 if range_klines:
                     range_fetch_failed_log_sent = False
-                    range_high = float(range_klines[0][2])
-                    range_low = float(range_klines[0][3])
+                    range_high, range_low = float(range_klines[0][2]), float(range_klines[0][3])
                     last_range_day = now_ny.day
-                    if not in_position:
-                        state = "AWAITING_BREAKOUT"
-                        breakout_direction = None
+                    if not trade_info: state = "AWAITING_BREAKOUT"
                     print(colored(f"\n[{symbol}] Zakres na dziś ustalony:", "green", attrs=['bold']), flush=True)
                     print(colored(f"  - Top Range:    {range_high}", "green"), flush=True)
                     print(colored(f"  - Bottom Range: {range_low}", "green"), flush=True)
                 else:
                     if not range_fetch_failed_log_sent:
-                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nie można pobrać danych 4h z API. Ponawiam próbę co 60 sekund...", "red"), flush=True)
+                        print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Nie można pobrać danych 4h z API. Ponawiam próbę...", "red"), flush=True)
                         range_fetch_failed_log_sent = True
                     time.sleep(60)
                     continue
 
-            position_size = client.get_position_size(symbol)
-            if position_size > 0:
-                in_position = True
-                if not in_position_log_sent:
-                    print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja otwarta ({position_size} {symbol}). Oczekuję na SL/TP...", "cyan"), flush=True)
-                    in_position_log_sent = True
+            # --- Zarządzanie Otwartą Pozycją ---
+            position_data = client.get_position_info(symbol)
+            if position_data:
+                if not trade_info: 
+                    trade_info = {"sl_moved_to_be": True} 
+
+                if config['use_break_even'] and not trade_info.get("sl_moved_to_be"):
+                    current_price = client.get_current_price(symbol)
+                    if current_price:
+                        side, be_target, entry_price = trade_info["side"], trade_info["be_target"], trade_info["entry_price"]
+                        if (side == "Buy" and current_price >= be_target) or (side == "Sell" and current_price <= be_target):
+                            client.modify_position_sl(symbol, entry_price)
+                            trade_info["sl_moved_to_be"] = True
+                            print(colored(f"[{symbol}][{now_ny.strftime('%H:%M:%S')}] Osiągnięto cel 1R. SL przesunięty na Break-Even ({entry_price}).", "cyan"), flush=True)
                 time.sleep(15)
                 continue
-            elif in_position and position_size == 0:
+            elif trade_info:
                 print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] Pozycja zamknięta. Wznawiam skanowanie rynku.", "green", attrs=['bold']), flush=True)
-                in_position = False
-                in_position_log_sent = False
+                trade_info = {}
                 state = "AWAITING_BREAKOUT"
             
-            if not in_position and state in ["AWAITING_BREAKOUT", "AWAITING_REENTRY"]:
-                klines_trade = client.get_klines(symbol, config['trade_interval'], limit=2)
-                if len(klines_trade) < 2:
+            # --- Skanowanie w Poszukiwaniu Sygnału ---
+            if state in ["AWAITING_BREAKOUT", "AWAITING_REENTRY"]:
+                klines_trade = client.get_klines(symbol, config['trade_interval'], limit=20)
+                if len(klines_trade) < 20:
                     time.sleep(10)
                     continue
 
-                last_closed_candle = klines_trade[0]
+                last_closed_candle = klines_trade[-2]
                 candle_high, candle_low, candle_close = float(last_closed_candle[2]), float(last_closed_candle[3]), float(last_closed_candle[4])
                 
                 if state == "AWAITING_BREAKOUT":
@@ -247,19 +267,29 @@ def run_strategy(config):
                         breakout_extreme_price = candle_low
 
                     signal_confirmed = False
-                    if breakout_direction == "UP" and candle_close < range_high:
-                        side, stop_loss, entry_price = "Sell", breakout_extreme_price, candle_close
-                        take_profit = entry_price - (abs(entry_price - stop_loss) * config['tp_ratio'])
+                    if (breakout_direction == "UP" and candle_close < range_high) or (breakout_direction == "DOWN" and candle_close > range_low):
                         signal_confirmed = True
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał SHORT!", "red", attrs=['bold']), flush=True)
-
-                    elif breakout_direction == "DOWN" and candle_close > range_low:
-                        side, stop_loss, entry_price = "Buy", breakout_extreme_price, candle_close
-                        take_profit = entry_price + (abs(entry_price - stop_loss) * config['tp_ratio'])
-                        signal_confirmed = True
-                        print(colored(f"\n[{symbol}][{now_ny.strftime('%H:%M:%S')}] POWRÓT DO ZAKRESU! Potwierdzony sygnał LONG!", "green", attrs=['bold']), flush=True)
-
+                        
                     if signal_confirmed:
+                        side = "Sell" if breakout_direction == "UP" else "Buy"
+                        entry_price = candle_close
+                        
+                        # --- ZMIANA: Logika wyboru i logowania Stop Lossa ---
+                        stop_loss = breakout_extreme_price
+                        sl_source = "Domyślny (skrajny punkt)"
+
+                        if config['use_smart_sl']:
+                            smart_sl = find_smart_sl_level(klines_trade, breakout_direction, breakout_extreme_price)
+                            if smart_sl != stop_loss:
+                                print(colored(f"[{symbol}] Znaleziono Smart SL: {smart_sl} (zamiast {stop_loss})", "blue"), flush=True)
+                                stop_loss = smart_sl
+                                sl_source = "Smart SL"
+                        
+                        print(colored(f"[{symbol}] Wybrano Stop Loss ({sl_source}): {stop_loss}", "cyan"), flush=True)
+                        # --- KONIEC ZMIANY ---
+
+                        take_profit = entry_price - (abs(entry_price - stop_loss) * config['tp_ratio']) if side == "Sell" else entry_price + (abs(entry_price - stop_loss) * config['tp_ratio'])
+                        
                         balance = client.get_wallet_balance()
                         risk_amount = balance * (config['risk_percentage'] / 100)
                         stop_loss_distance = abs(entry_price - stop_loss)
@@ -267,34 +297,24 @@ def run_strategy(config):
                         if stop_loss_distance == 0:
                             state = "AWAITING_BREAKOUT"
                             continue
-
-                        # === POCZĄTEK NOWEJ LOGIKI DOPASOWANIA WIELKOŚCI POZYCJI ===
                         
-                        # 1. Oblicz idealną ilość na podstawie ryzyka
                         qty_by_risk = risk_amount / stop_loss_distance
-                        
-                        # 2. Oblicz maksymalną możliwą ilość na podstawie salda
                         leverage = float(config['leverage'])
-                        max_position_notional = balance * leverage
-                        max_qty_by_balance = max_position_notional / entry_price
-
-                        # 3. Wybierz mniejszą z tych dwóch wartości
+                        max_qty_by_balance = (balance * leverage * 0.95) / entry_price
                         final_qty = min(qty_by_risk, max_qty_by_balance)
-
-                        # 4. Sprawdź, czy pozycja została zmniejszona i poinformuj o tym
+                        
                         if final_qty < qty_by_risk:
-                            print(colored(f"[{symbol}] OSTRZEŻENIE: Niewystarczające środki do pokrycia ryzyka {config['risk_percentage']}%. Zmniejszono wielkość pozycji do maksymalnej możliwej.", "red"), flush=True)
-
-                        # === KONIEC NOWEJ LOGIKI ===
+                             print(colored(f"[{symbol}] OSTRZEŻENIE: Niewystarczające środki. Zmniejszono wielkość pozycji.", "red"), flush=True)
 
                         adjusted_qty = math.floor(final_qty / instrument_rules['qtyStep']) * instrument_rules['qtyStep']
                         
                         if adjusted_qty >= instrument_rules['minOrderQty']:
                             final_qty_str = f"{adjusted_qty:.{qty_precision}f}"
                             client.place_order_with_sl_tp(symbol, side, final_qty_str, round(stop_loss, 4), round(take_profit, 4))
-                            in_position = True
+                            
+                            be_target = entry_price + stop_loss_distance if side == "Buy" else entry_price - stop_loss_distance
+                            trade_info = {"side": side, "entry_price": entry_price, "be_target": be_target, "sl_moved_to_be": False}
                         else:
-                            print(colored(f"[{symbol}] Ostateczna ilość ({adjusted_qty}) jest mniejsza niż minimalna. Zlecenie anulowane.", "red"), flush=True)
                             state = "AWAITING_BREAKOUT"
             
             time.sleep(5)
