@@ -21,7 +21,7 @@ BOT_CONFIGS = [
     {
         "symbol": "BTCUSDT",
         "leverage": "10",
-        "risk_percentage": 0.5,
+        "risk_percentage": 1,
         "tp_ratio": 2.0,
         "range_interval": "240",
         "trade_interval": "5",
