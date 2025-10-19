@@ -45,7 +45,9 @@ class BybitClient:
         if method == "POST":
             payload_str = json.dumps(params, separators=(',', ':'))
         else:
-            payload_str = "&".join([f"{k}={v}" for k, v in sorted(params.items())])
+            # Parametry dla GET muszą być posortowane alfabetycznie dla sygnatury
+            sorted_params = sorted(params.items())
+            payload_str = "&".join([f"{k}={v}" for k, v in sorted_params])
 
         to_sign = timestamp + self.api_key + recv_window + payload_str
         signature = hmac.new(self.api_secret.encode('utf-8'), to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
@@ -62,51 +64,57 @@ class BybitClient:
             if method == "POST":
                 response = self.session.post(url, headers=headers, data=payload_str)
             else:
-                del headers['Content-Type']
-                response = self.session.get(url, headers=headers, params=params)
+                del headers['Content-Type'] # Usuwamy Content-Type dla żądań GET
+                # Przekazujemy 'params' jako słownik do 'requests.get'
+                response = self.session.get(url, headers=headers, params=params) 
             
             response.raise_for_status()
             data = response.json()
 
+            # Obsługa błędów Bybit (retCode != 0)
             if data.get("retCode") != 0 and data.get("retCode") not in [110025, 110043]:
                 print(colored(f"Błąd API Bybit: {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
             return data
+        except requests.exceptions.HTTPError as http_err:
+            if http_err.response.status_code == 403:
+                print(colored(f"KRYTYCZNY BŁĄD 403 (Forbidden): Sprawdź uprawnienia klucza API i brak restrykcji IP. {http_err}", "red", attrs=['bold']), flush=True)
+            else:
+                print(colored(f"Błąd HTTP: {http_err}", "red"), flush=True)
+            return None
         except Exception as e:
             print(colored(f"Błąd połączenia: {e}", "red"), flush=True)
             return None
 
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_klines(self, symbol, interval, limit=200):
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
-        try:
-            response = requests.get(self.base_url + endpoint, params=params)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("retCode") == 0: return data["result"]["list"]
-            return []
-        except Exception as e:
-            print(colored(f"Błąd pobierania klines: {e}", "red"), flush=True)
-            return []
+        
+        data = self._send_request("GET", endpoint, params)
+        if data and data.get("retCode") == 0:
+            return data["result"]["list"]
+        
+        if data:
+            print(colored(f"Błąd pobierania klines (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
+        return []
             
-    # NOWA FUNKCJA DO POBIERANIA REGUŁ HANDLOWYCH
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_instrument_info(self, symbol):
         endpoint = "/v5/market/instruments-info"
         params = {"category": "linear", "symbol": symbol}
-        try:
-            response = requests.get(self.base_url + endpoint, params=params)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("retCode") == 0 and data["result"]["list"]:
-                info = data["result"]["list"][0]
-                return {
-                    "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
-                    "qtyStep": float(info["lotSizeFilter"]["qtyStep"])
-                }
-            return None
-        except Exception as e:
-            print(colored(f"Błąd pobierania informacji o instrumencie: {e}", "red"), flush=True)
-            return None
+        
+        data = self._send_request("GET", endpoint, params)
+        if data and data.get("retCode") == 0 and data["result"]["list"]:
+            info = data["result"]["list"][0]
+            return {
+                "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
+                "qtyStep": float(info["lotSizeFilter"]["qtyStep"])
+            }
+        
+        if data:
+            print(colored(f"Błąd pobierania informacji o instrumencie (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
+        return None
 
     def get_wallet_balance(self):
         endpoint = "/v5/account/wallet-balance"
@@ -117,16 +125,18 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_last_price(self, symbol):
         endpoint = "/v5/market/tickers"
         params = {"category": "linear", "symbol": symbol}
-        try:
-            response = requests.get(self.base_url + endpoint, params=params)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("retCode") == 0 and data["result"]["list"]: return float(data["result"]["list"][0]["lastPrice"])
-            return 0
-        except Exception: return 0
+        
+        data = self._send_request("GET", endpoint, params)
+        if data and data.get("retCode") == 0 and data["result"]["list"]:
+            return float(data["result"]["list"][0]["lastPrice"])
+        
+        if data:
+            print(colored(f"Błąd pobierania ostatniej ceny (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
+        return 0
 
     def get_position(self, symbol):
         endpoint = "/v5/position/list"
@@ -160,6 +170,7 @@ class BybitClient:
         return self._send_request("POST", endpoint, params)
 
 # === LOGIKA TRADINGOWA ===
+# ZMIANA: Zwraca kierunek, wstęgę górną (SL dla Short), wstęgę dolną (SL dla Long)
 def calculate_supertrend_kivanc(data, period, factor):
     highs = [float(d[2]) for d in data]
     lows = [float(d[3]) for d in data]
@@ -176,9 +187,8 @@ def calculate_supertrend_kivanc(data, period, factor):
         for i in range(period + 1, len(closes)):
             atr[i] = (atr[i-1] * (period - 1) + true_ranges[i]) / period
 
-    # ZMIANA: Zwracamy (0, 0, 0) jeśli jest za mało danych
     if not any(atr) or len(atr) < period: 
-        return 0, 0, 0 # Kierunek, Wstęga górna (SL dla Long), Wstęga dolna (SL dla Short)
+        return 0, 0, 0 # Kierunek, Wstęga dolna, Wstęga górna
 
     up, dn = ([0.0] * len(data) for _ in range(2))
     trend = [1] * len(data)
@@ -196,47 +206,40 @@ def calculate_supertrend_kivanc(data, period, factor):
         elif trend[i] == 1 and closes[i] < up[i-1]:
             trend[i] = -1
     
-    # ZMIANA: Zwracamy kierunek trendu oraz wartości wstęg (nasze poziomy SL)
-    # up[-1] to poziom SL dla pozycji Long
-    # dn[-1] to poziom SL dla pozycji Short
+    # Zwraca (kierunek, dolna wstęga SL dla Long, górna wstęga SL dla Short)
     return trend[-1], up[-1], dn[-1]
 
-# ZMIANA: PRZEBUDOWANA FUNKCJA DO SKŁADANIA ZLECEŃ (teraz przyjmuje stop_loss_price)
+# ZMIANA: Logika obliczania wielkości pozycji na podstawie SL
 def execute_trade(client, config, instrument_rules, stop_loss_price):
     balance = client.get_wallet_balance()
     price = client.get_last_price(config['symbol'])
     
     if not (balance > 0 and price > 0):
-        print(colored(f"[{config['symbol']}] Błąd: Brak salda lub ceny.", "red"), flush=True)
+        print(colored(f"[{config['symbol']}] Błąd: Brak salda ({balance}) lub ceny ({price}).", "red"), flush=True)
         return None
 
     min_qty = instrument_rules["minOrderQty"]
     qty_step = instrument_rules["qtyStep"]
 
-    # ZMIANA: Logika obliczania wielkości pozycji na podstawie ryzyka i Stop Loss
-    
-    # 1. Oblicz maksymalną stratę w USDT na podstawie procentu ryzyka
+    # 1. Oblicz maksymalną stratę w USDT
     loss_in_usdt = balance * (config['risk_percentage'] / 100)
     
     # 2. Oblicz dystans (w cenie) od aktualnej ceny do poziomu Stop Loss
     sl_distance = abs(price - stop_loss_price)
 
-    # 3. Sprawdź, czy dystans nie jest zerowy (aby uniknąć dzielenia przez zero)
     if sl_distance == 0:
         print(colored(f"[{config['symbol']}] BŁĄD: Dystans do Stop Loss wynosi 0 (Cena={price}, SL={stop_loss_price}). Anulowanie zlecenia.", "red"), flush=True)
         return None
 
-    # 4. Oblicz "surową" ilość: (Strata w USDT) / (Dystans SL w cenie)
+    # 3. Oblicz "surową" ilość
     raw_qty = loss_in_usdt / sl_distance
     
-    # Koniec zmian w logice obliczeń
-
-    # 5. Sprawdź, czy ilość jest powyżej minimum giełdy
+    # 4. Sprawdź, czy ilość jest powyżej minimum giełdy
     if raw_qty < min_qty:
         print(colored(f"[{config['symbol']}] BŁĄD: Obliczona ilość {raw_qty:.6f} jest mniejsza niż minimalna {min_qty}. Zwiększ kapitał lub % ryzyka.", "red"), flush=True)
         return None
         
-    # 6. Dostosuj ilość do wymaganego kroku (qtyStep)
+    # 5. Dostosuj ilość do wymaganego kroku (qtyStep)
     adjusted_qty = math.floor(raw_qty / qty_step) * qty_step
     
     # Konwersja do stringa z odpowiednią precyzją
@@ -299,20 +302,17 @@ def run_strategy_for_pair(config):
             klines_closed = klines_raw[1:]
             klines_closed.reverse()
             
-            # ZMIANA: Przechwytujemy teraz 3 wartości: kierunek, wstęgę górną (SL dla long) i dolną (SL dla short)
+            # ZMIANA: Przechwytujemy 3 wartości: kierunek, wstęgę dolną (SL dla long) i górną (SL dla short)
             signal_direction, sl_up_band, sl_dn_band = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
 
-            # ZMIANA: Sprawdzamy, czy kalkulacja się powiodła
             if signal_direction == 0:
                 print(colored(f"[{symbol}] Błąd kalkulacji Supertrend (prawdopodobnie za mało danych). Czekam...", "yellow"), flush=True)
-                time.sleep(30); continue # Krótsze oczekiwanie
+                time.sleep(30); continue 
 
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
             
             # ZMIANA: Wybieramy odpowiedni poziom SL na podstawie sygnału
-            # Dla Long (Buy) stop lossem jest dolna wstęga (up_band)
-            # Dla Short (Sell) stop lossem jest górna wstęga (dn_band)
             stop_loss_price = sl_up_band if current_signal == "Buy" else sl_dn_band
             
             position_side, position_size, _ = client.get_position(symbol)
@@ -326,13 +326,14 @@ def run_strategy_for_pair(config):
             elif current_signal != last_signal:
                 print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
                 
+                # Bot zamyka pozycję tylko jeśli ją ma (obsługa ręcznego zamknięcia)
                 if position_size > 0:
                     close_side = "Buy" if position_side == "Sell" else "Sell"
                     client.place_order(symbol, close_side, position_size, reduce_only=True)
                     print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
                     time.sleep(5)
                 
-                # ZMIANA: Przekazanie poziomu SL do funkcji wykonującej transakcję
+                # Otwórz nową pozycję z obliczonym ryzykiem
                 execute_trade(client, config, instrument_rules, stop_loss_price)
             
             last_signal = current_signal
@@ -341,7 +342,7 @@ def run_strategy_for_pair(config):
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
             
-            # ZMIANA: Zmniejszono bufor oczekiwania z +5 do +2 sekund dla szybszej reakcji na 1m
+            # ZMIANA: Bufor +2 sekundy dla interwału 1m
             seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 2 
             
             print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
@@ -362,7 +363,7 @@ if __name__ == "__main__":
             threads.append(thread)
             thread.start()
             print(f"Uruchomiono wątek dla {config['symbol']}")
-            time.sleep(3)
+            time.sleep(3) # Odstęp między uruchamianiem wątków, aby uniknąć rate limit
 
         for thread in threads:
             thread.join()
