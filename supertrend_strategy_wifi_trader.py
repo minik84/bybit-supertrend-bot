@@ -9,10 +9,10 @@ import math # Dodajemy bibliotekę math do obsługi zaokrągleń w dół
 from termcolor import colored
 
 # === KONFIGURACJA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku" 
-API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
+API_KEY = "cN0mOPz8MBnpmEgB0A"  # Wstaw swój klucz
+API_SECRET = "YyiQKOpuYz4cle0Apjjsgln0ehDzgA1wiZPN" # Wstaw swój secret
 BASE_URL = "https://api.bybit.com"
-LEVERAGE = "10"
+LEVERAGE = "10" # Dźwignia pozostaje jako globalne ustawienie
 
 # ==============================================================================
 # === KONFIGURACJA BOTÓW ===
@@ -20,10 +20,10 @@ LEVERAGE = "10"
 BOT_CONFIGS = [
     {
         "symbol": "WIFUSDT",
-        "interval": "15",
+        "interval": "1", # ZMIANA: Ustawienie interwału na 1 minutę
         "atr_period": 10,
-        "factor": 3.0,
-        "risk_percentage": 5
+        "factor": 4.0, # To jest Twój "ATR Multiplier"
+        "risk_percentage": 1 # ZMIANA: Ustawienie ryzyka na 1%
     }
 ]
 # ==============================================================================
@@ -176,7 +176,9 @@ def calculate_supertrend_kivanc(data, period, factor):
         for i in range(period + 1, len(closes)):
             atr[i] = (atr[i-1] * (period - 1) + true_ranges[i]) / period
 
-    if not any(atr) or len(atr) < period: return 0
+    # ZMIANA: Zwracamy (0, 0, 0) jeśli jest za mało danych
+    if not any(atr) or len(atr) < period: 
+        return 0, 0, 0 # Kierunek, Wstęga górna (SL dla Long), Wstęga dolna (SL dla Short)
 
     up, dn = ([0.0] * len(data) for _ in range(2))
     trend = [1] * len(data)
@@ -194,44 +196,59 @@ def calculate_supertrend_kivanc(data, period, factor):
         elif trend[i] == 1 and closes[i] < up[i-1]:
             trend[i] = -1
     
-    return trend[-1]
+    # ZMIANA: Zwracamy kierunek trendu oraz wartości wstęg (nasze poziomy SL)
+    # up[-1] to poziom SL dla pozycji Long
+    # dn[-1] to poziom SL dla pozycji Short
+    return trend[-1], up[-1], dn[-1]
 
-# PRZEBUDOWANA FUNKCJA DO SKŁADANIA ZLECEŃ
-def execute_trade(client, config, instrument_rules):
+# ZMIANA: PRZEBUDOWANA FUNKCJA DO SKŁADANIA ZLECEŃ (teraz przyjmuje stop_loss_price)
+def execute_trade(client, config, instrument_rules, stop_loss_price):
     balance = client.get_wallet_balance()
     price = client.get_last_price(config['symbol'])
     
     if not (balance > 0 and price > 0):
+        print(colored(f"[{config['symbol']}] Błąd: Brak salda lub ceny.", "red"), flush=True)
         return None
 
     min_qty = instrument_rules["minOrderQty"]
     qty_step = instrument_rules["qtyStep"]
 
-    margin_to_risk = balance * (config['risk_percentage'] / 100)
-    notional_value = margin_to_risk * float(LEVERAGE)
+    # ZMIANA: Logika obliczania wielkości pozycji na podstawie ryzyka i Stop Loss
     
-    # Oblicz "surową" ilość
-    raw_qty = notional_value / price
+    # 1. Oblicz maksymalną stratę w USDT na podstawie procentu ryzyka
+    loss_in_usdt = balance * (config['risk_percentage'] / 100)
+    
+    # 2. Oblicz dystans (w cenie) od aktualnej ceny do poziomu Stop Loss
+    sl_distance = abs(price - stop_loss_price)
 
-    # 1. Sprawdź, czy ilość jest powyżej minimum giełdy
+    # 3. Sprawdź, czy dystans nie jest zerowy (aby uniknąć dzielenia przez zero)
+    if sl_distance == 0:
+        print(colored(f"[{config['symbol']}] BŁĄD: Dystans do Stop Loss wynosi 0 (Cena={price}, SL={stop_loss_price}). Anulowanie zlecenia.", "red"), flush=True)
+        return None
+
+    # 4. Oblicz "surową" ilość: (Strata w USDT) / (Dystans SL w cenie)
+    raw_qty = loss_in_usdt / sl_distance
+    
+    # Koniec zmian w logice obliczeń
+
+    # 5. Sprawdź, czy ilość jest powyżej minimum giełdy
     if raw_qty < min_qty:
-        print(colored(f"[{config['symbol']}] BŁĄD: Obliczona ilość {raw_qty:.6f} jest mniejsza niż minimalna dozwolona ilość {min_qty}. Zwiększ kapitał lub procent ryzyka.", "red"), flush=True)
+        print(colored(f"[{config['symbol']}] BŁĄD: Obliczona ilość {raw_qty:.6f} jest mniejsza niż minimalna {min_qty}. Zwiększ kapitał lub % ryzyka.", "red"), flush=True)
         return None
         
-    # 2. Dostosuj ilość do wymaganego kroku (qtyStep)
-    # Używamy math.floor, aby zaokrąglić w dół do najbliższej wielokrotności kroku
+    # 6. Dostosuj ilość do wymaganego kroku (qtyStep)
     adjusted_qty = math.floor(raw_qty / qty_step) * qty_step
     
-    # Konwersja do stringa z odpowiednią precyzją, aby uniknąć notacji naukowej
-    # Znajdujemy liczbę miejsc po przecinku w qty_step
+    # Konwersja do stringa z odpowiednią precyzją
     if '.' in str(qty_step):
         precision = len(str(qty_step).split('.')[1])
     else:
         precision = 0
     final_qty_str = f"{adjusted_qty:.{precision}f}"
 
-
-    print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzyko: {margin_to_risk:.2f} USDT. Surowa ilość: {raw_qty:.4f}. Finalna ilość: {final_qty_str}", "cyan"), flush=True)
+    print(colored(f"[{config['symbol']}] Kapitał: {balance:.2f} USDT. Ryzyko: {loss_in_usdt:.2f} USDT.", "cyan"), flush=True)
+    print(colored(f"[{config['symbol']}] Cena: {price}, SL: {stop_loss_price:.4f}, Dystans SL: {sl_distance:.4f}", "cyan"), flush=True)
+    print(colored(f"[{config['symbol']}] Surowa ilość: {raw_qty:.4f}. Finalna ilość: {final_qty_str}", "cyan"), flush=True)
     
     # Upewniamy się, że finalna ilość nie jest zerowa po zaokrągleniu
     if float(final_qty_str) > 0:
@@ -249,13 +266,12 @@ def run_strategy_for_pair(config):
     print(colored(f"[{symbol}] Bot Supertrend (Stop & Reverse) uruchomiony!", "green"), flush=True)
     print(f"[{symbol}] Interwał: {interval}m, Ryzyko: {config['risk_percentage']}%", flush=True)
 
-    # MODYFIKACJA: Zmienne do przechowywania reguł i statusu inicjalizacji
     last_signal, leverage_set, rules_fetched = None, False, False
     instrument_rules = {}
 
     while True:
         try:
-            # Jednorazowe pobranie reguł handlowych dla symbolu na starcie
+            # Jednorazowe pobranie reguł handlowych
             if not rules_fetched:
                 rules = client.get_instrument_info(symbol)
                 if rules:
@@ -266,6 +282,7 @@ def run_strategy_for_pair(config):
                     print(colored(f"[{symbol}] Nie udało się pobrać reguł handlowych. Ponowna próba za 10s.", "red"), flush=True)
                     time.sleep(10); continue
             
+            # Jednorazowe ustawienie dźwigni
             if not leverage_set:
                 result = client.set_leverage(symbol, LEVERAGE)
                 if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
@@ -282,17 +299,30 @@ def run_strategy_for_pair(config):
             klines_closed = klines_raw[1:]
             klines_closed.reverse()
             
-            signal_direction = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
+            # ZMIANA: Przechwytujemy teraz 3 wartości: kierunek, wstęgę górną (SL dla long) i dolną (SL dla short)
+            signal_direction, sl_up_band, sl_dn_band = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
+
+            # ZMIANA: Sprawdzamy, czy kalkulacja się powiodła
+            if signal_direction == 0:
+                print(colored(f"[{symbol}] Błąd kalkulacji Supertrend (prawdopodobnie za mało danych). Czekam...", "yellow"), flush=True)
+                time.sleep(30); continue # Krótsze oczekiwanie
+
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
             
+            # ZMIANA: Wybieramy odpowiedni poziom SL na podstawie sygnału
+            # Dla Long (Buy) stop lossem jest dolna wstęga (up_band)
+            # Dla Short (Sell) stop lossem jest górna wstęga (dn_band)
+            stop_loss_price = sl_up_band if current_signal == "Buy" else sl_dn_band
+            
             position_side, position_size, _ = client.get_position(symbol)
             status_color = "green" if current_signal == "Buy" else "red"
-            print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni sygnał: {last_signal} | Aktualny sygnał: {colored(current_signal, status_color)} | Otwarta pozycja: {colored(position_side, 'cyan')} ({position_size})", flush=True)
+            print(f"[{symbol}][{time.strftime('%H:%M:%S')}] Poprzedni sygnał: {last_signal} | Aktualny sygnał: {colored(current_signal, status_color)} | Pozycja: {colored(position_side, 'cyan')} ({position_size})", flush=True)
             
             if last_signal is None:
                 last_signal = current_signal
-                print(colored(f"[{symbol}] Inicjalizacja. Pierwszy odczytany sygnał: {current_signal}. Oczekiwanie na zmianę.", "blue"), flush=True)
+                print(colored(f"[{symbol}] Inicjalizacja. Pierwszy sygnał: {current_signal}. Oczekiwanie na zmianę.", "blue"), flush=True)
+            
             elif current_signal != last_signal:
                 print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
                 
@@ -302,15 +332,18 @@ def run_strategy_for_pair(config):
                     print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
                     time.sleep(5)
                 
-                # MODYFIKACJA: Przekazanie reguł do funkcji wykonującej transakcję
-                execute_trade(client, config, instrument_rules)
+                # ZMIANA: Przekazanie poziomu SL do funkcji wykonującej transakcję
+                execute_trade(client, config, instrument_rules, stop_loss_price)
             
             last_signal = current_signal
 
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
-            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 5
+            
+            # ZMIANA: Zmniejszono bufor oczekiwania z +5 do +2 sekund dla szybszej reakcji na 1m
+            seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 2 
+            
             print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
             time.sleep(seconds_to_wait)
 
