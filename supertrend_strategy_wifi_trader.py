@@ -9,8 +9,8 @@ import math # Dodajemy bibliotekę math do obsługi zaokrągleń w dół
 from termcolor import colored
 
 # === KONFIGURACJA ===
-API_KEY = "cN0mOPz8MBnpmEgB0A"  # Wstaw swój klucz
-API_SECRET = "YyiQKOpuYz4cle0Apjjsgln0ehDzgA1wiZPN" # Wstaw swój secret
+API_KEY = "7wNz85HfTWLEwYSNvq"  # Wstaw swój klucz
+API_SECRET = "vxUMPh2UrzWb9uMRei1uZauXEeQaNFmzWP6A" # Wstaw swój secret
 BASE_URL = "https://api.bybit.com"
 LEVERAGE = "10" # Dźwignia pozostaje jako globalne ustawienie
 
