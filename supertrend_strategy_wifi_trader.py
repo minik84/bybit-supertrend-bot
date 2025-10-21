@@ -22,7 +22,7 @@ BOT_CONFIGS = [
         "symbol": "WIFUSDT",
         "interval": "1", # ZMIANA: Ustawienie interwału na 1 minutę
         "atr_period": 10,
-        "factor": 8.0, # To jest Twój "ATR Multiplier"
+        "factor": 9.0, # To jest Twój "ATR Multiplier"
         "risk_percentage": 1 # ZMIANA: Ustawienie ryzyka na 1%
     }
 ]
