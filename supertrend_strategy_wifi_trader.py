@@ -86,24 +86,19 @@ class BybitClient:
             print(colored(f"Błąd połączenia: {e}", "red"), flush=True)
             return None
 
-    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_klines(self, symbol, interval, limit=200):
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
-        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0:
             return data["result"]["list"]
-        
         if data:
             print(colored(f"Błąd pobierania klines (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return []
             
-    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_instrument_info(self, symbol):
         endpoint = "/v5/market/instruments-info"
         params = {"category": "linear", "symbol": symbol}
-        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             info = data["result"]["list"][0]
@@ -111,7 +106,6 @@ class BybitClient:
                 "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
                 "qtyStep": float(info["lotSizeFilter"]["qtyStep"])
             }
-        
         if data:
             print(colored(f"Błąd pobierania informacji o instrumencie (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return None
@@ -125,15 +119,12 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
-    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_last_price(self, symbol):
         endpoint = "/v5/market/tickers"
         params = {"category": "linear", "symbol": symbol}
-        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             return float(data["result"]["list"][0]["lastPrice"])
-        
         if data:
             print(colored(f"Błąd pobierania ostatniej ceny (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return 0
@@ -170,18 +161,19 @@ class BybitClient:
         return self._send_request("POST", endpoint, params)
 
 # === LOGIKA TRADINGOWA ===
-# ZMIANA: Zwraca kierunek, wstęgę górną (SL dla Short), wstęgę dolną (SL dla Long)
+
+# =======================================================================
+# === OSTATECZNA, POPRAWNA FUNKCJA (LICZĄCA SMA ZGODNIE Z TWOIMI USTAWIENIAMI TV) ===
+# =======================================================================
 def calculate_supertrend_kivanc(data, period, factor):
     highs = [float(d[2]) for d in data]
     lows = [float(d[3]) for d in data]
     closes = [float(d[4]) for d in data]
     
+    # Ustawienia na TV wskazują na źródło (H+L)/2
     src = [(h + l) / 2 for h, l in zip(highs, lows)]
 
-    # =======================================================================
-    # === MODYFIKACJA KODU: ZMIANA OBLICZEŃ ATR Z RMA NA SMA ===
-    # =======================================================================
-    
+    # Obliczenia ATR jako SMA (zgodnie z "Change ATR Calculation Method ?")
     true_ranges = []
     if len(closes) > 0:
         true_ranges.append(highs[0] - lows[0]) # Pierwszy TR jako H-L
@@ -196,10 +188,6 @@ def calculate_supertrend_kivanc(data, period, factor):
             # Sumuj 'period' ostatnich wartości z true_ranges
             tr_slice = true_ranges[i - period + 1 : i + 1]
             atr[i] = sum(tr_slice) / period
-            
-    # =======================================================================
-    # === KONIEC MODYFIKACJI ===
-    # =======================================================================
 
     if not any(atr) or len(atr) < period: 
         return 0, 0, 0 # Kierunek, Wstęga dolna, Wstęga górna
@@ -207,6 +195,7 @@ def calculate_supertrend_kivanc(data, period, factor):
     up, dn = ([0.0] * len(data) for _ in range(2))
     trend = [1] * len(data)
 
+    # Pętla logiki musi startować od 'period', bo dopiero tam mamy kompletne dane ATR
     for i in range(period, len(data)):
         up_basic = src[i] - (factor * atr[i])
         dn_basic = src[i] + (factor * atr[i])
@@ -222,8 +211,11 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     # Zwraca (kierunek, dolna wstęga SL dla Long, górna wstęga SL dla Short)
     return trend[-1], up[-1], dn[-1]
+# =======================================================================
+# === KONIEC POPRAWIONEJ FUNKCJI ===
+# =======================================================================
 
-# ZMIANA: Logika obliczania wielkości pozycji na podstawie SL
+
 def execute_trade(client, config, instrument_rules, stop_loss_price):
     balance = client.get_wallet_balance()
     price = client.get_last_price(config['symbol'])
@@ -316,7 +308,6 @@ def run_strategy_for_pair(config):
             klines_closed = klines_raw[1:]
             klines_closed.reverse()
             
-            # ZMIANA: Przechwytujemy 3 wartości: kierunek, wstęgę dolną (SL dla long) i górną (SL dla short)
             signal_direction, sl_up_band, sl_dn_band = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
 
             if signal_direction == 0:
@@ -326,7 +317,6 @@ def run_strategy_for_pair(config):
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
             
-            # ZMIANA: Wybieramy odpowiedni poziom SL na podstawie sygnału
             stop_loss_price = sl_up_band if current_signal == "Buy" else sl_dn_band
             
             position_side, position_size, _ = client.get_position(symbol)
@@ -340,14 +330,12 @@ def run_strategy_for_pair(config):
             elif current_signal != last_signal:
                 print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
                 
-                # Bot zamyka pozycję tylko jeśli ją ma (obsługa ręcznego zamknięcia)
                 if position_size > 0:
                     close_side = "Buy" if position_side == "Sell" else "Sell"
                     client.place_order(symbol, close_side, position_size, reduce_only=True)
                     print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
                     time.sleep(5)
                 
-                # Otwórz nową pozycję z obliczonym ryzykiem
                 execute_trade(client, config, instrument_rules, stop_loss_price)
             
             last_signal = current_signal
@@ -356,7 +344,6 @@ def run_strategy_for_pair(config):
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
             
-            # ZMIANA: Bufor +2 sekundy dla interwału 1m
             seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 2 
             
             print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
