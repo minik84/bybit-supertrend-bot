@@ -158,15 +158,6 @@ PRESETS = {
         "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
     },
     
-    "FTMUSDT_15m": {
-        "symbol": "FTMUSDT", "interval": "15", "ma_choice": "VWMA", "ma_period": 300,
-        "std_period_long": 11, "std_coeff_long": 0.8, "atr_period_long": 7, "atr_coeff_long": 1.1,
-        "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
-        "std_period_short": 14, "std_coeff_short": 0.4, "atr_period_short": 13, "atr_coeff_short": 1.1,
-        "ma_distance_perc_short": 1.3, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
-    },
-    
     "GRTUSDT_15m": {
         "symbol": "GRTUSDT", "interval": "15", "ma_choice": "SMA", "ma_period": 200,
         "std_period_long": 14, "std_coeff_long": 0.4, "atr_period_long": 14, "atr_coeff_long": 2.8,
@@ -182,15 +173,6 @@ PRESETS = {
         "ma_distance_perc_long": 0.8, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.9, "atr_period_short": 14, "atr_coeff_short": 1.2,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
-    },
-    
-    "MATICUSDT_15m": {
-        "symbol": "MATICUSDT", "interval": "15", "ma_choice": "HMA", "ma_period": 300,
-        "std_period_long": 12, "std_coeff_long": 0.5, "atr_period_long": 10, "atr_coeff_long": 0.6,
-        "ma_distance_perc_long": 0.9, "stop_loss_perc_long": 4.5,
-        "std_period_short": 13, "std_coeff_short": 1.3, "atr_period_short": 11, "atr_coeff_short": 1.2,
-        "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
         "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
     },
     
@@ -235,15 +217,6 @@ PRESETS = {
         "std_period_long": 11, "std_coeff_long": 1.0, "atr_period_long": 14, "atr_coeff_long": 1.3,
         "ma_distance_perc_long": 1.4, "stop_loss_perc_long": 4.5,
         "std_period_short": 12, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.5,
-        "ma_distance_perc_short": 1.1, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
-    },
-    
-    "UNFIUSDT_15m": {
-        "symbol": "UNFIUSDT", "interval": "15", "ma_choice": "HMA", "ma_period": 400,
-        "std_period_long": 14, "std_coeff_long": 1.8, "atr_period_long": 8, "atr_coeff_long": 1.4,
-        "ma_distance_perc_long": 1.1, "stop_loss_perc_long": 4.5,
-        "std_period_short": 11, "std_coeff_short": 1.0, "atr_period_short": 7, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.1, "stop_loss_perc_short": 4.5,
         "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
     },
@@ -301,16 +274,13 @@ BOT_CONFIGS = [
     PRESETS["DYDXUSDT_15m"].copy(),
     PRESETS["EGLDUSDT_15m"].copy(),
     PRESETS["ENJUSDT_15m"].copy(),
-    PRESETS["FTMUSDT_15m"].copy(),
     PRESETS["GRTUSDT_15m"].copy(),
     PRESETS["MANAUSDT_15m"].copy(),
-    PRESETS["MATICUSDT_15m"].copy(),
     PRESETS["NEARUSDT_15m"].copy(),
     PRESETS["ONEUSDT_15m"].copy(),
     PRESETS["RUNEUSDT_15m"].copy(),
     PRESETS["SANDUSDT_15m"].copy(),
     PRESETS["SOLUSDT_15m"].copy(),
-    PRESETS["UNFIUSDT_15m"].copy(),
     PRESETS["WAVESUSDT_15m"].copy(),
     PRESETS["XRPUSDT_15m"].copy(),
     PRESETS["YFIUSDT_15m"].copy(),
