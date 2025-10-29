@@ -66,7 +66,7 @@ class BybitClient:
             else:
                 del headers['Content-Type'] # Usuwamy Content-Type dla żądań GET
                 # Przekazujemy 'params' jako słownik do 'requests.get'
-                response = self.session.get(url, headers=headers, params=params) 
+                response = self.session.get(url, headers=headers, params=params)  
             
             response.raise_for_status()
             data = response.json()
@@ -178,14 +178,28 @@ def calculate_supertrend_kivanc(data, period, factor):
     
     src = [(h + l) / 2 for h, l in zip(highs, lows)]
 
-    true_ranges = [max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1])) for i in range(1, len(closes))]
-    true_ranges.insert(0, 0)
+    # =======================================================================
+    # === MODYFIKACJA KODU: ZMIANA OBLICZEŃ ATR Z RMA NA SMA ===
+    # =======================================================================
+    
+    true_ranges = []
+    if len(closes) > 0:
+        true_ranges.append(highs[0] - lows[0]) # Pierwszy TR jako H-L
+        for i in range(1, len(closes)):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+            true_ranges.append(tr)
 
     atr = [0.0] * len(closes)
-    if len(closes) > period:
-        atr[period] = sum(true_ranges[1:period+1]) / period
-        for i in range(period + 1, len(closes)):
-            atr[i] = (atr[i-1] * (period - 1) + true_ranges[i]) / period
+    if len(closes) >= period:
+        # Oblicz SMA dla każdego punktu, zaczynając od pierwszego pełnego okresu
+        for i in range(period - 1, len(closes)):
+            # Sumuj 'period' ostatnich wartości z true_ranges
+            tr_slice = true_ranges[i - period + 1 : i + 1]
+            atr[i] = sum(tr_slice) / period
+            
+    # =======================================================================
+    # === KONIEC MODYFIKACJI ===
+    # =======================================================================
 
     if not any(atr) or len(atr) < period: 
         return 0, 0, 0 # Kierunek, Wstęga dolna, Wstęga górna
