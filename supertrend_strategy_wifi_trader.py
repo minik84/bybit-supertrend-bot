@@ -66,7 +66,7 @@ class BybitClient:
             else:
                 del headers['Content-Type'] # Usuwamy Content-Type dla żądań GET
                 # Przekazujemy 'params' jako słownik do 'requests.get'
-                response = self.session.get(url, headers=headers, params=params)  
+                response = self.session.get(url, headers=headers, params=params) 
             
             response.raise_for_status()
             data = response.json()
@@ -86,19 +86,24 @@ class BybitClient:
             print(colored(f"Błąd połączenia: {e}", "red"), flush=True)
             return None
 
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_klines(self, symbol, interval, limit=200):
         endpoint = "/v5/market/kline"
         params = {"category": "linear", "symbol": symbol, "interval": interval, "limit": limit}
+        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0:
             return data["result"]["list"]
+        
         if data:
             print(colored(f"Błąd pobierania klines (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return []
             
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_instrument_info(self, symbol):
         endpoint = "/v5/market/instruments-info"
         params = {"category": "linear", "symbol": symbol}
+        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             info = data["result"]["list"][0]
@@ -106,6 +111,7 @@ class BybitClient:
                 "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
                 "qtyStep": float(info["lotSizeFilter"]["qtyStep"])
             }
+        
         if data:
             print(colored(f"Błąd pobierania informacji o instrumencie (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return None
@@ -119,12 +125,15 @@ class BybitClient:
                 if coin["coin"] == "USDT": return float(coin["walletBalance"])
         return 0
 
+    # ZMIANA: Używa _send_request (podpisane żądanie)
     def get_last_price(self, symbol):
         endpoint = "/v5/market/tickers"
         params = {"category": "linear", "symbol": symbol}
+        
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             return float(data["result"]["list"][0]["lastPrice"])
+        
         if data:
             print(colored(f"Błąd pobierania ostatniej ceny (retCode: {data.get('retCode')}, retMsg: {data.get('retMsg')})", "red"), flush=True)
         return 0
@@ -161,61 +170,79 @@ class BybitClient:
         return self._send_request("POST", endpoint, params)
 
 # === LOGIKA TRADINGOWA ===
-
-# =======================================================================
-# === OSTATECZNA, POPRAWNA FUNKCJA (LICZĄCA SMA ZGODNIE Z TWOIMI USTAWIENIAMI TV) ===
-# =======================================================================
+# POPRAWIONA FUNKCJA: Dokładna replikacja SuperTrend z TradingView
 def calculate_supertrend_kivanc(data, period, factor):
+    """
+    Dokładna replikacja SuperTrend z TradingView (Kivanc Ozbilgic)
+    Zwraca: (kierunek, dolna wstęga SL dla Long, górna wstęga SL dla Short)
+    """
     highs = [float(d[2]) for d in data]
     lows = [float(d[3]) for d in data]
     closes = [float(d[4]) for d in data]
     
-    # Ustawienia na TV wskazują na źródło (H+L)/2
-    src = [(h + l) / 2 for h, l in zip(highs, lows)]
-
-    # Obliczenia ATR jako SMA (zgodnie z "Change ATR Calculation Method ?")
-    true_ranges = []
-    if len(closes) > 0:
-        true_ranges.append(highs[0] - lows[0]) # Pierwszy TR jako H-L
-        for i in range(1, len(closes)):
-            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
-            true_ranges.append(tr)
-
-    atr = [0.0] * len(closes)
-    if len(closes) >= period:
-        # Oblicz SMA dla każdego punktu, zaczynając od pierwszego pełnego okresu
-        for i in range(period - 1, len(closes)):
-            # Sumuj 'period' ostatnich wartości z true_ranges
-            tr_slice = true_ranges[i - period + 1 : i + 1]
-            atr[i] = sum(tr_slice) / period
-
-    if not any(atr) or len(atr) < period: 
-        return 0, 0, 0 # Kierunek, Wstęga dolna, Wstęga górna
-
-    up, dn = ([0.0] * len(data) for _ in range(2))
-    trend = [1] * len(data)
-
-    # Pętla logiki musi startować od 'period', bo dopiero tam mamy kompletne dane ATR
-    for i in range(period, len(data)):
+    n = len(closes)
+    
+    # Źródło: hl2
+    src = [(highs[i] + lows[i]) / 2 for i in range(n)]
+    
+    # True Range
+    tr = [0.0] * n
+    tr[0] = highs[0] - lows[0]  # Dla pierwszej świecy
+    for i in range(1, n):
+        tr[i] = max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i-1]),
+            abs(lows[i] - closes[i-1])
+        )
+    
+    # ATR (SMA z True Range)
+    atr = [0.0] * n
+    if n >= period:
+        # Pierwsza wartość ATR to średnia z pierwszych 'period' wartości TR
+        atr[period - 1] = sum(tr[:period]) / period
+        
+        # Kolejne wartości ATR używają wygładzania
+        for i in range(period, n):
+            atr[i] = (atr[i-1] * (period - 1) + tr[i]) / period
+    
+    # Inicjalizacja wstęg
+    up = [0.0] * n
+    dn = [0.0] * n
+    
+    for i in range(period - 1, n):
+        # Bazowe wartości wstęg
         up_basic = src[i] - (factor * atr[i])
         dn_basic = src[i] + (factor * atr[i])
         
-        up[i] = max(up_basic, up[i-1]) if closes[i-1] > up[i-1] else up_basic
-        dn[i] = min(dn_basic, dn[i-1]) if closes[i-1] < dn[i-1] else dn_basic
-        
-        trend[i] = trend[i-1]
-        if trend[i] == -1 and closes[i] > dn[i-1]:
-            trend[i] = 1
-        elif trend[i] == 1 and closes[i] < up[i-1]:
-            trend[i] = -1
+        # Logika SuperTrend
+        if i == period - 1:
+            up[i] = up_basic
+            dn[i] = dn_basic
+        else:
+            # Up band
+            up[i] = max(up_basic, up[i-1]) if closes[i-1] > up[i-1] else up_basic
+            # Down band
+            dn[i] = min(dn_basic, dn[i-1]) if closes[i-1] < dn[i-1] else dn_basic
     
-    # Zwraca (kierunek, dolna wstęga SL dla Long, górna wstęga SL dla Short)
+    # Określenie trendu
+    trend = [0] * n
+    
+    # Inicjalizacja trendu
+    if n >= period:
+        trend[period - 1] = 1
+        
+        for i in range(period, n):
+            if trend[i-1] == -1 and closes[i] > dn[i-1]:
+                trend[i] = 1
+            elif trend[i-1] == 1 and closes[i] < up[i-1]:
+                trend[i] = -1
+            else:
+                trend[i] = trend[i-1]
+    
+    # Zwróć: kierunek, dolna wstęga (SL dla Long), górna wstęga (SL dla Short)
     return trend[-1], up[-1], dn[-1]
-# =======================================================================
-# === KONIEC POPRAWIONEJ FUNKCJI ===
-# =======================================================================
 
-
+# ZMIANA: Logika obliczania wielkości pozycji na podstawie SL
 def execute_trade(client, config, instrument_rules, stop_loss_price):
     balance = client.get_wallet_balance()
     price = client.get_last_price(config['symbol'])
@@ -265,7 +292,6 @@ def execute_trade(client, config, instrument_rules, stop_loss_price):
     
     return None
 
-
 # === GŁÓWNA PĘTLA BOTA (DLA JEDNEJ PARY) ===
 def run_strategy_for_pair(config):
     client = BybitClient(API_KEY, API_SECRET)
@@ -308,6 +334,7 @@ def run_strategy_for_pair(config):
             klines_closed = klines_raw[1:]
             klines_closed.reverse()
             
+            # ZMIANA: Przechwytujemy 3 wartości: kierunek, wstęgę dolną (SL dla long) i górną (SL dla short)
             signal_direction, sl_up_band, sl_dn_band = calculate_supertrend_kivanc(klines_closed, config['atr_period'], config['factor'])
 
             if signal_direction == 0:
@@ -317,6 +344,7 @@ def run_strategy_for_pair(config):
             current_signal = "Buy" if signal_direction == 1 else "Sell"
             config['current_signal'] = current_signal
             
+            # ZMIANA: Wybieramy odpowiedni poziom SL na podstawie sygnału
             stop_loss_price = sl_up_band if current_signal == "Buy" else sl_dn_band
             
             position_side, position_size, _ = client.get_position(symbol)
@@ -330,12 +358,14 @@ def run_strategy_for_pair(config):
             elif current_signal != last_signal:
                 print(colored(f"[{symbol}] ZMIANA TRENDU z {last_signal} na {current_signal}!", "magenta", attrs=['bold']), flush=True)
                 
+                # Bot zamyka pozycję tylko jeśli ją ma (obsługa ręcznego zamknięcia)
                 if position_size > 0:
                     close_side = "Buy" if position_side == "Sell" else "Sell"
                     client.place_order(symbol, close_side, position_size, reduce_only=True)
                     print(colored(f"[{symbol}] Pozycja ({position_side}) zamknięta. Czekam 5s przed otwarciem nowej...", "yellow"), flush=True)
                     time.sleep(5)
                 
+                # Otwórz nową pozycję z obliczonym ryzykiem
                 execute_trade(client, config, instrument_rules, stop_loss_price)
             
             last_signal = current_signal
@@ -344,6 +374,7 @@ def run_strategy_for_pair(config):
             interval_minutes = int(interval)
             minutes_to_next_interval = interval_minutes - (now.minute % interval_minutes)
             
+            # ZMIANA: Bufor +2 sekundy dla interwału 1m
             seconds_to_wait = (minutes_to_next_interval * 60) - now.second + 2 
             
             print(colored(f"--- [{symbol}] Czekam {int(seconds_to_wait)}s do nast. świecy {interval}m ---\n", "blue"), flush=True)
