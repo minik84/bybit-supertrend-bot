@@ -262,19 +262,19 @@ BOT_CONFIGS = [
     
     # === 30 MINUT ===
     PRESETS["BNBUSDT_30m"].copy(),
-    PRESETS["BTCUSDT_30m"].copy(),
-    PRESETS["ETHUSDT_30m"].copy(),
+    # PRESETS["BTCUSDT_30m"].copy(),
+    # PRESETS["ETHUSDT_30m"].copy(),
     
     # === 15 MINUT ===
     PRESETS["ADAUSDT_15m"].copy(),
-    PRESETS["ATOMUSDT_15m"].copy(),
+    # PRESETS["ATOMUSDT_15m"].copy(),
     PRESETS["AUDIOUSDT_15m"].copy(),
-    PRESETS["AXSUSDT_15m"].copy(),
+    # PRESETS["AXSUSDT_15m"].copy(),
     PRESETS["BELUSDT_15m"].copy(),
-    PRESETS["COMPUSDT_15m"].copy(),
+    # PRESETS["COMPUSDT_15m"].copy(),
     PRESETS["CRVUSDT_15m"].copy(),
-    PRESETS["DOTUSDT_15m"].copy(),
-    PRESETS["DYDXUSDT_15m"].copy(),
+    # PRESETS["DOTUSDT_15m"].copy(),
+    # PRESETS["DYDXUSDT_15m"].copy(),
     PRESETS["EGLDUSDT_15m"].copy(),
     PRESETS["ENJUSDT_15m"].copy(),
     PRESETS["GRTUSDT_15m"].copy(),
@@ -283,8 +283,8 @@ BOT_CONFIGS = [
     PRESETS["ONEUSDT_15m"].copy(),
     PRESETS["RUNEUSDT_15m"].copy(),
     PRESETS["SANDUSDT_15m"].copy(),
-    PRESETS["SOLUSDT_15m"].copy(),
-    PRESETS["WAVESUSDT_15m"].copy(),
+    # PRESETS["SOLUSDT_15m"].copy(),
+    # PRESETS["WAVESUSDT_15m"].copy(),
     PRESETS["XRPUSDT_15m"].copy(),
     PRESETS["YFIUSDT_15m"].copy(),
 ]
