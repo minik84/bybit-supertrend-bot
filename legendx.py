@@ -27,64 +27,6 @@ BASE_URL = "https://api.bybit.com"  # Produkcja
 
 LEVERAGE = "20"  # Dźwignia
 
-# ==============================================================================
-# === KONFIGURACJA BOTÓW ===
-# ==============================================================================
-
-BOT_CONFIGS = [
-    # ========== WSZYSTKIE PARY Z PINESCRIPT ==========
-    # Możesz zakomentować (#) pary których nie chcesz używać
-    
-    # === 30 MINUT ===
-    PRESETS["BNBUSDT_30m"].copy(),
-    PRESETS["BTCUSDT_30m"].copy(),
-    PRESETS["ETHUSDT_30m"].copy(),
-    
-    # === 15 MINUT ===
-    PRESETS["ADAUSDT_15m"].copy(),
-    PRESETS["ATOMUSDT_15m"].copy(),
-    PRESETS["AUDIOUSDT_15m"].copy(),
-    PRESETS["AXSUSDT_15m"].copy(),
-    PRESETS["BELUSDT_15m"].copy(),
-    PRESETS["COMPUSDT_15m"].copy(),
-    PRESETS["CRVUSDT_15m"].copy(),
-    PRESETS["DOTUSDT_15m"].copy(),
-    PRESETS["DYDXUSDT_15m"].copy(),
-    PRESETS["EGLDUSDT_15m"].copy(),
-    PRESETS["ENJUSDT_15m"].copy(),
-    PRESETS["FTMUSDT_15m"].copy(),
-    PRESETS["GRTUSDT_15m"].copy(),
-    PRESETS["MANAUSDT_15m"].copy(),
-    PRESETS["MATICUSDT_15m"].copy(),
-    PRESETS["NEARUSDT_15m"].copy(),
-    PRESETS["ONEUSDT_15m"].copy(),
-    PRESETS["RUNEUSDT_15m"].copy(),
-    PRESETS["SANDUSDT_15m"].copy(),
-    PRESETS["SOLUSDT_15m"].copy(),
-    PRESETS["UNFIUSDT_15m"].copy(),
-    PRESETS["WAVESUSDT_15m"].copy(),
-    PRESETS["XRPUSDT_15m"].copy(),
-    PRESETS["YFIUSDT_15m"].copy(),
-]
-
-# ========== OPCJE DOSTOSOWANIA ==========
-
-# Opcja 1: Zmień ryzyko dla wszystkich par
-for config in BOT_CONFIGS:
-    config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
-
-# Opcja 2: Jeśli chcesz tylko kilka wybranych par, zakomentuj powyższe i użyj:
-# BOT_CONFIGS = [
-#     PRESETS["BTCUSDT_30m"].copy(),
-#     PRESETS["ETHUSDT_30m"].copy(),
-#     PRESETS["SOLUSDT_15m"].copy(),
-# ]
-
-# ==============================================================================
-# === PREDEFINIOWANE KONFIGURACJE (PRESETY) ===
-# Wszystkie parametry z oryginalnej strategii Legendx PineScript
-# ==============================================================================
-
 PRESETS = {
     # ========== 30 MINUT ==========
     
@@ -333,6 +275,66 @@ PRESETS = {
         "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0
     },
 }
+
+# ==============================================================================
+# === KONFIGURACJA BOTÓW ===
+# ==============================================================================
+
+BOT_CONFIGS = [
+    # ========== WSZYSTKIE PARY Z PINESCRIPT ==========
+    # Możesz zakomentować (#) pary których nie chcesz używać
+    
+    # === 30 MINUT ===
+    PRESETS["BNBUSDT_30m"].copy(),
+    PRESETS["BTCUSDT_30m"].copy(),
+    PRESETS["ETHUSDT_30m"].copy(),
+    
+    # === 15 MINUT ===
+    PRESETS["ADAUSDT_15m"].copy(),
+    PRESETS["ATOMUSDT_15m"].copy(),
+    PRESETS["AUDIOUSDT_15m"].copy(),
+    PRESETS["AXSUSDT_15m"].copy(),
+    PRESETS["BELUSDT_15m"].copy(),
+    PRESETS["COMPUSDT_15m"].copy(),
+    PRESETS["CRVUSDT_15m"].copy(),
+    PRESETS["DOTUSDT_15m"].copy(),
+    PRESETS["DYDXUSDT_15m"].copy(),
+    PRESETS["EGLDUSDT_15m"].copy(),
+    PRESETS["ENJUSDT_15m"].copy(),
+    PRESETS["FTMUSDT_15m"].copy(),
+    PRESETS["GRTUSDT_15m"].copy(),
+    PRESETS["MANAUSDT_15m"].copy(),
+    PRESETS["MATICUSDT_15m"].copy(),
+    PRESETS["NEARUSDT_15m"].copy(),
+    PRESETS["ONEUSDT_15m"].copy(),
+    PRESETS["RUNEUSDT_15m"].copy(),
+    PRESETS["SANDUSDT_15m"].copy(),
+    PRESETS["SOLUSDT_15m"].copy(),
+    PRESETS["UNFIUSDT_15m"].copy(),
+    PRESETS["WAVESUSDT_15m"].copy(),
+    PRESETS["XRPUSDT_15m"].copy(),
+    PRESETS["YFIUSDT_15m"].copy(),
+]
+
+# ========== OPCJE DOSTOSOWANIA ==========
+
+# Opcja 1: Zmień ryzyko dla wszystkich par
+for config in BOT_CONFIGS:
+    config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
+
+# Opcja 2: Jeśli chcesz tylko kilka wybranych par, zakomentuj powyższe i użyj:
+# BOT_CONFIGS = [
+#     PRESETS["BTCUSDT_30m"].copy(),
+#     PRESETS["ETHUSDT_30m"].copy(),
+#     PRESETS["SOLUSDT_15m"].copy(),
+# ]
+
+# ==============================================================================
+# === PREDEFINIOWANE KONFIGURACJE (PRESETY) ===
+# Wszystkie parametry z oryginalnej strategii Legendx PineScript
+# ==============================================================================
+
+
 
 # ==============================================================================
 # === KLASA DO OBSŁUGI API BYBIT ===
