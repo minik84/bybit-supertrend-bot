@@ -5,10 +5,12 @@
     Strategia bazowana na MA + ATR + Standard Deviation
     3 poziomy Take Profit | Breakeven Management | Risk Management
     
-    Wersja zmodyfikowana:
-    - Naprawiono błędy Rate Limit (Jitter)
-    - Poprawiono logikę Breakeven (TP1)
-    - Wdrożono logikę "Reverse" (odwracanie pozycji)
+    Wersja poprawiona:
+    - ✅ Naprawiono błąd SL (przelicza od rzeczywistej ceny wejścia)
+    - ✅ Naprawiono błędy Rate Limit (Jitter)
+    - ✅ Poprawiono logikę Breakeven (math.ceil/floor)
+    - ✅ Wdrożono logikę "Reverse" (odwracanie pozycji)
+    - ✅ Adaptywne TP (wykorzystuje całą qty)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -20,7 +22,7 @@ import json
 import datetime
 import threading
 import math
-import random  # ZMIANA: Dodano import random dla jittera
+import random
 from termcolor import colored
 
 # ==============================================================================
@@ -519,20 +521,11 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
     """
     Oblicza wielkości dla partial take profit
     NOWA LOGIKA: Wykorzystaj całą qty nawet jeśli nie da się podzielić równo
-    
-    Przykłady:
-    - 17.5 XRP, min 10 → [17.5] (1 TP)
-    - 25 XRP, min 10 → [13, 12] (2 TP)
-    - 35 XRP, min 10 → [12, 12, 11] (3 TP)
-    - 8 XRP, min 10 → [8] (1 TP, nawet poniżej minimum)
     """
-    # Idealnie podziel na num_levels
     qty_per_level = total_qty / num_levels
     qty_per_level = round_to_step(qty_per_level, qty_step)
     
-    # Sprawdź ile poziomów faktycznie możemy ustawić
     if qty_per_level >= min_order_qty:
-        # Normalny przypadek: każdy TP >= minimum
         quantities = []
         remaining = total_qty
         
@@ -542,7 +535,6 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
             quantities.append(qty_per_level)
             remaining -= qty_per_level
         
-        # Ostatni poziom dostaje resztę
         if remaining > 0:
             remaining = round_to_step(remaining, qty_step)
             quantities.append(remaining)
@@ -552,14 +544,9 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
         return quantities
     
     else:
-        # Specjalny przypadek: qty_per_level < minimum
-        # Spróbuj ustawić mniej TP, ale większych
-        
-        # Ile poziomów możemy zrobić przy minimum qty?
         max_possible_levels = int(total_qty / min_order_qty)
         
         if max_possible_levels >= 2:
-            # Możemy zrobić 2+ poziomy
             quantities = []
             remaining = total_qty
             
@@ -570,7 +557,6 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
                 quantities.append(qty)
                 remaining -= qty
             
-            # Ostatni dostaje resztę
             if remaining > 0:
                 remaining = round_to_step(remaining, qty_step)
                 quantities.append(remaining)
@@ -578,17 +564,12 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
             return quantities
         
         else:
-            # Możemy tylko 1 TP (lub total_qty < minimum, ale i tak użyjemy całość)
             return [total_qty]
-
-# ==============================================================================
-# === ZMIANA: FUNKCJA MONITORUJĄCA (BREAKEVEN + JITTER) ===
-# ==============================================================================
 
 def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules):
     """
     Monitoruje pozycję i zarządza Stop Loss:
-    - Po trafieniu TP1: przesuwa SL na breakeven (entry price) - z poprawnym zaokrąglaniem
+    - Po trafieniu TP1: przesuwa SL na breakeven (entry price)
     - Po trafieniu TP2: przesuwa SL na TP1
     - Po trafieniu TP3: przesuwa SL na TP2
     """
@@ -597,26 +578,19 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
     
     while True:
         try:
-            # Sprawdź czy pozycja jeszcze istnieje
             position_side, position_size, avg_price = client.get_position(symbol)
             
             if position_size == 0:
                 print(colored(f"[{symbol}] Pozycja zamknięta - kończę monitoring", "yellow"), flush=True)
                 break
             
-            # Pobierz aktualną cenę
             current_price = client.get_last_price(symbol)
             
-            # Sprawdź które TP zostały trafione
             if is_long:
-                # LONG: sprawdź czy cena osiągnęła TP
                 if not tp_hit[0] and current_price >= tp_levels[0]:
                     tp_hit[0] = True
-                    
-                    # ZMIANA: Zawsze zaokrąglaj BE w górę (na korzyść) do najbliższego ticka
                     new_sl = math.ceil(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
                     
-                    # Przesuń SL tylko jeśli jest lepszy niż obecny
                     if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
@@ -625,9 +599,8 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 
                 elif not tp_hit[1] and current_price >= tp_levels[1]:
                     tp_hit[1] = True
-                    # Przesuń SL na TP1
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    if new_sl > current_sl: # Przesuń tylko jeśli jest lepszy
+                    if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
@@ -635,23 +608,18 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 
                 elif not tp_hit[2] and current_price >= tp_levels[2]:
                     tp_hit[2] = True
-                    # Przesuń SL na TP2
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    if new_sl > current_sl: # Przesuń tylko jeśli jest lepszy
+                    if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
                             print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
-                # SHORT: sprawdź czy cena osiągnęła TP (cena spada)
                 if not tp_hit[0] and current_price <= tp_levels[0]:
                     tp_hit[0] = True
-
-                    # ZMIANA: Zawsze zaokrąglaj BE w dół (na korzyść) do najbliższego ticka
                     new_sl = math.floor(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
 
-                    # Przesuń SL tylko jeśli jest lepszy niż obecny
                     if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
@@ -661,7 +629,7 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 elif not tp_hit[1] and current_price <= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    if new_sl < current_sl: # Przesuń tylko jeśli jest lepszy
+                    if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
@@ -670,14 +638,13 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 elif not tp_hit[2] and current_price <= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    if new_sl < current_sl: # Przesuń tylko jeśli jest lepszy
+                    if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
                             print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
             
-            # ZMIANA: Dodano Jitter (losowe opóźnienie) aby uniknąć rate limit
-            jitter_sleep = random.uniform(9.5, 11.0) # Średnio co ~10.25s
+            jitter_sleep = random.uniform(9.5, 11.0)
             time.sleep(jitter_sleep)
             
         except Exception as e:
@@ -685,22 +652,15 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
             time.sleep(30)
             break
 
-# ==============================================================================
-# (Koniec zmian w funkcji monitorującej)
-# ==============================================================================
-
 def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels, is_long, instrument_rules, stop_loss_price):
     """
-    Ustawia partial take profit zlecenia - NOWA LOGIKA
-    Wykorzystuje całą qty, ustawia tyle TP ile się da
+    Ustawia partial take profit zlecenia
     """
     num_levels = len(tp_levels)
     min_order_qty = instrument_rules["minOrderQty"]
     
-    # Oblicz quantities - funkcja sama zdecyduje ile TP ustawić
     quantities = calculate_partial_tp_quantities(total_qty, num_levels, instrument_rules["qtyStep"], min_order_qty)
     
-    # Jeśli mamy mniej quantities niż tp_levels, użyj tylko pierwszych TP
     actual_tp_count = len(quantities)
     active_tp_levels = tp_levels[:actual_tp_count]
     
@@ -711,12 +671,10 @@ def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels
     successful_orders = 0
     
     for i, (tp_price, qty) in enumerate(zip(active_tp_levels, quantities), 1):
-        # Sprawdź czy qty jest sensowne (nie zerowe)
         if qty <= 0:
             print(colored(f"   TP{i}: Pomijam (qty = {qty})", "yellow"), flush=True)
             continue
         
-        # Ostrzeżenie jeśli poniżej minimum (ale i tak próbujemy)
         if qty < min_order_qty:
             print(colored(f"   ⚠️  TP{i}: qty {qty} < minimum {min_order_qty} (próbuję mimo to)", "yellow"), flush=True)
         
@@ -740,7 +698,6 @@ def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels
         except Exception as e:
             print(colored(f"   ✗ TP{i}: Exception - {e}", "red"), flush=True)
     
-    # Ustaw główny Stop Loss na pozycji
     if stop_loss_price:
         client.set_trading_stop(symbol, stop_loss=stop_loss_price)
         print(colored(f"   ✓ Stop Loss: {stop_loss_price:.4f}", "red"), flush=True)
@@ -773,7 +730,6 @@ def run_legendx_strategy(config):
     
     while True:
         try:
-            # Pobierz reguły handlowe
             if not rules_fetched:
                 rules = client.get_instrument_info(symbol)
                 if rules:
@@ -785,7 +741,6 @@ def run_legendx_strategy(config):
                     time.sleep(10)
                     continue
             
-            # Ustaw dźwignię
             if not leverage_set:
                 result = client.set_leverage(symbol, leverage)
                 if result and (result.get('retCode') == 0 or result.get('retCode') in [110025, 110043]):
@@ -795,7 +750,6 @@ def run_legendx_strategy(config):
                     time.sleep(10)
                     continue
             
-            # Pobierz dane historyczne
             klines_raw = client.get_klines(symbol, interval, limit=300)
             if not klines_raw or len(klines_raw) < max(config['atr_period_long'], config['atr_period_short']) + 2:
                 print(colored(f"[{symbol}] ⏳ Oczekiwanie na dane historyczne...", "yellow"), flush=True)
@@ -805,7 +759,6 @@ def run_legendx_strategy(config):
             klines_closed = klines_raw[1:]
             klines_closed.reverse()
             
-            # Oblicz sygnały
             long_trigger, short_trigger = calculate_signals(config, klines_closed)
             
             if not long_trigger or not short_trigger:
@@ -816,11 +769,9 @@ def run_legendx_strategy(config):
             long_trigger = round_to_tick(long_trigger, instrument_rules["tickSize"])
             short_trigger = round_to_tick(short_trigger, instrument_rules["tickSize"])
             
-            # Pobierz aktualną cenę i pozycję
             current_price = client.get_last_price(symbol)
             position_side, position_size, avg_price = client.get_position(symbol)
             
-            # Status output
             timestamp = time.strftime('%H:%M:%S')
             price_str = f"{current_price:.4f}"
             long_str = colored(f"↑{long_trigger:.4f}", 'green')
@@ -840,36 +791,29 @@ def run_legendx_strategy(config):
             else:
                 print(f"[{symbol}][{timestamp}] 📊 {price_str} | {long_str} {short_str} | {colored('No Position', 'yellow')}", flush=True)
             
-            # ==================================================================
-            # === ZMIANA: LOGIKA WEJŚCIA (Z FUNKCJĄ REVERSE) ===
-            # ==================================================================
+            # === LOGIKA WEJŚCIA Z REVERSE ===
             
             long_signal_active = current_price >= long_trigger * 0.99
             short_signal_active = current_price <= short_trigger * 1.01
 
-            # --- 1. LOGIKA DLA SYGNAŁU LONG ---
+            # LONG SIGNAL
             if long_signal_active:
                 
-                # REVERSE: Jeśli mamy shorta, a jest sygnał long, zamykamy shorta
                 if position_side == "Sell":
                     print(colored(f"\n{'='*70}", "green", attrs=['bold']))
                     print(colored(f"[{symbol}] 🔄 REVERSE SYGNAŁ: SHORT ➔ LONG", "green", attrs=['bold']))
                     
-                    # 1. Anuluj wszystkie stare zlecenia TP/SL
                     client.cancel_all_orders(symbol)
                     time.sleep(0.5)
                     
-                    # 2. Zamknij pozycję SHORT (order reduce_only)
                     _, position_size_to_close, _ = client.get_position(symbol)
                     if position_size_to_close > 0:
                         client.place_order(symbol, "Buy", position_size_to_close, reduce_only=True)
                         print(colored(f"[{symbol}] --- Zamknięto {position_size_to_close} SHORT", "yellow"), flush=True)
-                        time.sleep(2.0) # Poczekaj na realizację zamknięcia
+                        time.sleep(2.0)
                     
-                    # 3. Ustawiamy flagę, że jesteśmy gotowi do otwarcia nowej
                     position_side = "None"
                 
-                # WEJŚCIE LONG: Jeśli nie ma pozycji (bo właśnie zamknęliśmy lub nie było)
                 if position_side == "None":
                     balance = client.get_wallet_balance()
                     stop_loss_price = long_trigger * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
@@ -883,17 +827,20 @@ def run_legendx_strategy(config):
                         print(colored(f"{'='*70}", "green", attrs=['bold']))
                         print(f"Entry: {long_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
                         
-                        # 1. Otwórz pozycję Market
                         result = client.place_order(symbol, "Buy", qty)
                         
                         if result and result.get('retCode') == 0:
                             time.sleep(2)
                             
-                            # 2. Pobierz średnią cenę wejścia
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # 3. Oblicz poziomy TP
+                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
+                                stop_loss_price = entry_price * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
+                                stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+                                
+                                print(colored(f"[{symbol}] 📍 Rzeczywista cena: {entry_price:.4f} | Przeliczony SL: {stop_loss_price:.4f}", "cyan"), flush=True)
+                                
                                 tp_levels = calculate_tp_levels(
                                     entry_price,
                                     config['tp_levels'],
@@ -902,11 +849,9 @@ def run_legendx_strategy(config):
                                     instrument_rules["tickSize"]
                                 )
                                 
-                                # 4. Anuluj stare zlecenia (na wszelki wypadek)
                                 client.cancel_all_orders(symbol)
                                 time.sleep(0.5)
                                 
-                                # 5. Ustaw PARTIAL TAKE PROFITS
                                 place_partial_take_profits(
                                     client,
                                     symbol,
@@ -918,7 +863,6 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
-                                # 6. Uruchom monitoring breakeven
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
                                     args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
@@ -931,29 +875,24 @@ def run_legendx_strategy(config):
                             else:
                                 print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
 
-            # --- 2. LOGIKA DLA SYGNAŁU SHORT ---
+            # SHORT SIGNAL
             elif short_signal_active:
                 
-                # REVERSE: Jeśli mamy longa, a jest sygnał short, zamykamy longa
                 if position_side == "Buy":
                     print(colored(f"\n{'='*70}", "red", attrs=['bold']))
                     print(colored(f"[{symbol}] 🔄 REVERSE SYGNAŁ: LONG ➔ SHORT", "red", attrs=['bold']))
                     
-                    # 1. Anuluj wszystkie stare zlecenia TP/SL
                     client.cancel_all_orders(symbol)
                     time.sleep(0.5)
                     
-                    # 2. Zamknij pozycję LONG (order reduce_only)
                     _, position_size_to_close, _ = client.get_position(symbol)
                     if position_size_to_close > 0:
                         client.place_order(symbol, "Sell", position_size_to_close, reduce_only=True)
                         print(colored(f"[{symbol}] --- Zamknięto {position_size_to_close} LONG", "yellow"), flush=True)
-                        time.sleep(2.0) # Poczekaj na realizację zamknięcia
+                        time.sleep(2.0)
                     
-                    # 3. Ustawiamy flagę, że jesteśmy gotowi do otwarcia nowej
                     position_side = "None"
 
-                # WEJŚCIE SHORT: Jeśli nie ma pozycji (bo właśnie zamknęliśmy lub nie było)
                 if position_side == "None":
                     balance = client.get_wallet_balance()
                     stop_loss_price = short_trigger * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
@@ -967,17 +906,20 @@ def run_legendx_strategy(config):
                         print(colored(f"{'='*70}", "red", attrs=['bold']))
                         print(f"Entry: {short_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
                         
-                        # 1. Otwórz pozycję Market
                         result = client.place_order(symbol, "Sell", qty)
                         
                         if result and result.get('retCode') == 0:
                             time.sleep(2)
                             
-                            # 2. Pobierz średnią cenę wejścia
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # 3. Oblicz poziomy TP
+                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
+                                stop_loss_price = entry_price * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
+                                stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+                                
+                                print(colored(f"[{symbol}] 📍 Rzeczywista cena: {entry_price:.4f} | Przeliczony SL: {stop_loss_price:.4f}", "cyan"), flush=True)
+                                
                                 tp_levels = calculate_tp_levels(
                                     entry_price,
                                     config['tp_levels'],
@@ -986,11 +928,9 @@ def run_legendx_strategy(config):
                                     instrument_rules["tickSize"]
                                 )
                                 
-                                # 4. Anuluj stare zlecenia
                                 client.cancel_all_orders(symbol)
                                 time.sleep(0.5)
                                 
-                                # 5. Ustaw PARTIAL TAKE PROFITS
                                 place_partial_take_profits(
                                     client,
                                     symbol,
@@ -1002,7 +942,6 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
-                                # 6. Uruchom monitoring breakeven
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
                                     args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
@@ -1015,11 +954,6 @@ def run_legendx_strategy(config):
                             else:
                                 print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
             
-            # ==================================================================
-            # === KONIEC ZMIAN W LOGICE WEJŚCIA ===
-            # ==================================================================
-
-            # Czekaj do następnej świecy
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(interval)
             minutes_to_next = interval_minutes - (now.minute % interval_minutes)
@@ -1029,7 +963,6 @@ def run_legendx_strategy(config):
                 print(colored(f"[{symbol}] ⏱️  Następna świeca za {int(seconds_to_wait)}s\n", "blue"), flush=True)
                 time.sleep(seconds_to_wait)
             
-            # ZMIANA: Jitter, aby zdesynchronizować zapytania API między wątkami
             time.sleep(random.uniform(0.1, 2.0))
             
         except Exception as e:
@@ -1051,7 +984,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT TRADING BOT | 3 TP + Breakeven Management + Reverse", "white", attrs=['bold']))
+    print(colored("    BYBIT BOT | 3TP + Breakeven + Reverse + SL FIX", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1073,14 +1006,12 @@ def validate_config(config):
 if __name__ == "__main__":
     print_banner()
     
-    # Walidacja API keys
     if "TWOJ" in API_KEY or "CxQFjz7JivQbTnihTP" in API_KEY:
         print(colored("\n⚠️  UWAGA: Nie ustawiono prawdziwych kluczy API!", "yellow", attrs=['bold']))
         print(colored("Edytuj plik i ustaw API_KEY oraz API_SECRET\n", "yellow"))
         print(colored("TESTUJ ZAWSZE NA TESTNET NAJPIERW!", "red", attrs=['bold']))
         print(colored("Zmień BASE_URL na: https://api-testnet.bybit.com\n", "red"))
     
-    # Wyświetl konfiguracje
     print(colored("\n📋 Konfiguracje do uruchomienia:", "white", attrs=['bold']))
     print(colored("-" * 70, "white"))
     
@@ -1101,7 +1032,6 @@ if __name__ == "__main__":
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
     print(colored("="*70 + "\n", "cyan"))
     
-    # Uruchom boty w osobnych wątkach
     threads = []
     for i, config in enumerate(BOT_CONFIGS):
         if not validate_config(config):
@@ -1123,12 +1053,11 @@ if __name__ == "__main__":
     print(colored("Naciśnij Ctrl+C aby zatrzymać", "yellow"))
     print(colored("="*70 + "\n", "cyan"))
     
-    # Trzymaj główny wątek przy życiu
     try:
         for thread in threads:
             thread.join()
     except KeyboardInterrupt:
-        print(colored("\n\n⚠️  Zatrzymywanie botów...", "yellow",attrs=['bold']))
+        print(colored("\n\n⚠️  Zatrzymywanie botów...", "yellow", attrs=['bold']))
         print(colored("="*70, "yellow"))
         print(colored("✓ Boty zatrzymane. Do zobaczenia!", "green"))
         print(colored("="*70 + "\n", "yellow"))
