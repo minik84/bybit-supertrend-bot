@@ -11,7 +11,6 @@
     - ✅ Poprawiono logikę Breakeven (math.ceil/floor)
     - ✅ Wdrożono logikę "Reverse" (odwracanie pozycji)
     - ✅ Adaptywne TP (wykorzystuje całą qty)
-    - ✅ BREAKEVEN BUFFER - przesuwa SL delikatnie NA ZYSK (pokrywa opłaty)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -47,8 +46,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 13, "std_coeff_short": 1.3, "atr_period_short": 9, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.3, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3  # ✅ Bufor breakeven: 0.3% w zysk
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "BTCUSDT_30m": {
@@ -57,8 +55,7 @@ PRESETS = {
         "ma_distance_perc_long": 2.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 12, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "ETHUSDT_30m": {
@@ -67,8 +64,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 11, "std_coeff_short": 0.5, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     # ========== 15 MINUT ==========
@@ -79,8 +75,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.4,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "AUDIOUSDT_15m": {
@@ -89,8 +84,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 7, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.0,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "BELUSDT_15m": {
@@ -99,8 +93,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "EGLDUSDT_15m": {
@@ -109,8 +102,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 2.0, "atr_period_short": 14, "atr_coeff_short": 2.4,
         "ma_distance_perc_short": 1.9, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "GRTUSDT_15m": {
@@ -119,8 +111,7 @@ PRESETS = {
         "ma_distance_perc_long": 2.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.3, "atr_period_short": 14, "atr_coeff_short": 1.3,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "NEARUSDT_15m": {
@@ -129,8 +120,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "ONEUSDT_15m": {
@@ -139,8 +129,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "RUNEUSDT_15m": {
@@ -149,8 +138,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.2,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "SANDUSDT_15m": {
@@ -159,8 +147,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.2, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "XRPUSDT_15m": {
@@ -169,8 +156,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "YFIUSDT_15m": {
@@ -179,8 +165,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
-        "breakeven_buffer_perc": 0.3
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
 }
 
@@ -215,7 +200,6 @@ BOT_CONFIGS = [
 # Opcja: Zmień ryzyko dla wszystkich par
 for config in BOT_CONFIGS:
     config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
-    config['breakeven_buffer_perc'] = 0.3  # ✅ Bufor breakeven: 0.2-0.5% rekomendowane
 
 # ==============================================================================
 # === KLASA DO OBSŁUGI API BYBIT ===
@@ -284,16 +268,59 @@ class BybitClient:
         return []
 
     def get_instrument_info(self, symbol):
+        """
+        Pobiera kompletne informacje o instrumencie z Bybit
+        Zwraca: minOrderQty, qtyStep, tickSize, minNotional, precyzja qty, precyzja price
+        """
         endpoint = "/v5/market/instruments-info"
         params = {"category": "linear", "symbol": symbol}
         data = self._send_request("GET", endpoint, params)
         if data and data.get("retCode") == 0 and data["result"]["list"]:
             info = data["result"]["list"][0]
-            return {
-                "minOrderQty": float(info["lotSizeFilter"]["minOrderQty"]),
-                "qtyStep": float(info["lotSizeFilter"]["qtyStep"]),
-                "tickSize": float(info["priceFilter"]["tickSize"])
+            
+            # Podstawowe filtry
+            lot_filter = info["lotSizeFilter"]
+            price_filter = info["priceFilter"]
+            
+            min_order_qty = float(lot_filter["minOrderQty"])
+            qty_step = float(lot_filter["qtyStep"])
+            tick_size = float(price_filter["tickSize"])
+            
+            # Min notional value (minimalna wartość transakcji w USDT)
+            min_notional = float(lot_filter.get("minNotionalValue", 0))
+            if min_notional == 0:
+                # Fallback dla starszych API - oblicz z minOrderQty
+                min_notional = 5.0  # Bezpieczna wartość domyślna
+            
+            # Oblicz precyzję (ile miejsc po przecinku)
+            def get_precision(step_value):
+                """Oblicza precyzję z step value"""
+                step_str = f"{step_value:.10f}".rstrip('0')
+                if '.' in step_str:
+                    return len(step_str.split('.')[1])
+                return 0
+            
+            qty_precision = get_precision(qty_step)
+            price_precision = get_precision(tick_size)
+            
+            result = {
+                "minOrderQty": min_order_qty,
+                "qtyStep": qty_step,
+                "tickSize": tick_size,
+                "minNotional": min_notional,
+                "qtyPrecision": qty_precision,
+                "pricePrecision": price_precision,
+                "maxOrderQty": float(lot_filter.get("maxOrderQty", 999999)),
+                "baseCoin": info.get("baseCoin", symbol.replace("USDT", ""))
             }
+            
+            print(colored(f"[{symbol}] 📋 Instrument Rules:", "cyan"), flush=True)
+            print(colored(f"   Min Order Qty: {min_order_qty} (precision: {qty_precision})", "cyan"), flush=True)
+            print(colored(f"   Qty Step: {qty_step}", "cyan"), flush=True)
+            print(colored(f"   Min Notional: {min_notional} USDT", "cyan"), flush=True)
+            print(colored(f"   Tick Size: {tick_size} (precision: {price_precision})", "cyan"), flush=True)
+            
+            return result
         return None
 
     def get_wallet_balance(self):
@@ -481,10 +508,24 @@ def calculate_atr(data, period):
     return atr
 
 def round_to_tick(price, tick_size):
+    """Zaokrągla cenę do tick size"""
     return round(price / tick_size) * tick_size
 
 def round_to_step(qty, qty_step):
+    """Zaokrągla qty do qty step"""
     return math.floor(qty / qty_step) * qty_step
+
+def round_to_precision(value, precision):
+    """Zaokrągla wartość do określonej precyzji dziesiętnej"""
+    return round(value, precision)
+
+def validate_order_value(qty, price, min_notional):
+    """
+    Sprawdza czy wartość zlecenia spełnia minimum
+    qty * price >= minNotional
+    """
+    notional_value = qty * price
+    return notional_value >= min_notional, notional_value
 
 # ==============================================================================
 # === LOGIKA STRATEGII LEGENDX ===
@@ -533,177 +574,257 @@ def calculate_tp_levels(entry_price, tp_percentages, renorm_coeff, is_long, tick
         tp_levels.append(tp_price)
     return tp_levels
 
-def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_qty):
+def calculate_partial_tp_quantities(total_qty, tp_prices, qty_step, min_order_qty, min_notional):
     """
-    Oblicza wielkości dla partial take profit
-    LOGIKA: Wykorzystaj całą qty nawet jeśli nie da się podzielić równo
-    """
-    qty_per_level = total_qty / num_levels
-    qty_per_level = round_to_step(qty_per_level, qty_step)
+    Oblicza wielkości dla partial take profit z pełną walidacją
     
-    if qty_per_level >= min_order_qty:
-        quantities = []
+    Parametry:
+    - total_qty: całkowita ilość do podzielenia
+    - tp_prices: lista cen TP [TP1, TP2, TP3]
+    - qty_step: krok qty
+    - min_order_qty: minimalna qty
+    - min_notional: minimalna wartość transakcji (qty * price >= min_notional)
+    
+    Przykłady dla XRP (min_qty=10, min_notional=5):
+    - 19.1 XRP @ 2.2 USDT → [19.1] (1 TP, bo nie da się podzielić)
+    - 25 XRP @ 2.2 USDT → [13, 12] (2 TP)
+    - 35 XRP @ 2.2 USDT → [12, 12, 11] (3 TP)
+    """
+    
+    num_levels = len(tp_prices)
+    
+    print(colored(f"   📊 Calculating TP quantities:", "cyan"), flush=True)
+    print(colored(f"      Total: {total_qty} | Levels: {num_levels}", "cyan"), flush=True)
+    print(colored(f"      Min Qty: {min_order_qty} | Min Notional: {min_notional} USDT", "cyan"), flush=True)
+    
+    # Specjalny przypadek: total_qty < minimum qty
+    if total_qty < min_order_qty:
+        print(colored(f"   ⚠️  Total qty {total_qty} < min {min_order_qty} - używam całości", "yellow"), flush=True)
+        return [total_qty]
+    
+    # Sprawdź ile poziomów faktycznie możemy zrobić
+    valid_quantities = []
+    
+    for level_idx in range(num_levels, 0, -1):
+        # Próbuj podzielić na level_idx poziomów
+        qty_per_level = total_qty / level_idx
+        qty_per_level = round_to_step(qty_per_level, qty_step)
+        
+        # Sprawdź czy każdy poziom spełnia minimum
+        all_valid = True
+        temp_quantities = []
         remaining = total_qty
         
-        for i in range(num_levels - 1):
-            if qty_per_level > remaining:
-                qty_per_level = remaining
-            quantities.append(qty_per_level)
-            remaining -= qty_per_level
+        for i in range(level_idx):
+            if i == level_idx - 1:
+                # Ostatni poziom dostaje resztę
+                qty = round_to_step(remaining, qty_step)
+            else:
+                qty = qty_per_level
+            
+            # Sprawdź qty
+            if qty < min_order_qty:
+                all_valid = False
+                break
+            
+            # Sprawdź notional value
+            tp_price = tp_prices[i] if i < len(tp_prices) else tp_prices[-1]
+            notional = qty * tp_price
+            
+            if notional < min_notional:
+                all_valid = False
+                break
+            
+            temp_quantities.append(qty)
+            remaining -= qty
         
-        if remaining > 0:
-            remaining = round_to_step(remaining, qty_step)
-            quantities.append(remaining)
-        else:
-            quantities.append(qty_per_level)
-        
-        return quantities
+        if all_valid and len(temp_quantities) > 0:
+            print(colored(f"   ✅ Możliwe: {level_idx} poziomy TP", "green"), flush=True)
+            for idx, (qty, price) in enumerate(zip(temp_quantities, tp_prices[:len(temp_quantities)]), 1):
+                notional = qty * price
+                print(colored(f"      TP{idx}: {qty} @ {price:.4f} = {notional:.2f} USDT", "green"), flush=True)
+            return temp_quantities
     
-    else:
-        max_possible_levels = int(total_qty / min_order_qty)
-        
-        if max_possible_levels >= 2:
-            quantities = []
-            remaining = total_qty
-            
-            for i in range(max_possible_levels - 1):
-                qty = round_to_step(total_qty / max_possible_levels, qty_step)
-                if qty > remaining:
-                    qty = remaining
-                quantities.append(qty)
-                remaining -= qty
-            
-            if remaining > 0:
-                remaining = round_to_step(remaining, qty_step)
-                quantities.append(remaining)
-            
-            return quantities
-        
-        else:
-            return [total_qty]
+    # Jeśli nic nie działa, zwróć całość jako jeden TP
+    print(colored(f"   ⚠️  Nie można podzielić - używam 1 TP z całą qty", "yellow"), flush=True)
+    return [total_qty]
 
-def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules, config):
+def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules):
     """
-    Monitoruje pozycję i zarządza Stop Loss z buforem na zysk:
-    - Po trafieniu TP1: przesuwa SL na breakeven + BUFOR (np. +0.3%)
+    Monitoruje pozycję i zarządza Stop Loss:
+    - Po trafieniu TP1: przesuwa SL na breakeven (entry price)
     - Po trafieniu TP2: przesuwa SL na TP1
     - Po trafieniu TP3: przesuwa SL na TP2
     """
+    print(colored(f"[{symbol}] 🔍 MONITOR STARTUJE:", "cyan"), flush=True)
+    print(colored(f"   Entry: {entry_price:.6f}", "cyan"), flush=True)
+    print(colored(f"   TP Levels: {[f'{tp:.6f}' for tp in tp_levels]}", "cyan"), flush=True)
+    print(colored(f"   Initial SL: {stop_loss_price:.6f}", "cyan"), flush=True)
+    print(colored(f"   Direction: {'LONG' if is_long else 'SHORT'}", "cyan"), flush=True)
+    
     tp_hit = [False, False, False]
     current_sl = stop_loss_price
-    breakeven_buffer = config.get('breakeven_buffer_perc', 0.3)  # Domyślnie 0.3%
+    loop_count = 0
     
     while True:
         try:
+            loop_count += 1
+            
             position_side, position_size, avg_price = client.get_position(symbol)
             
             if position_size == 0:
-                print(colored(f"[{symbol}] Pozycja zamknięta - kończę monitoring", "yellow"), flush=True)
+                print(colored(f"[{symbol}] Pozycja zamknięta - kończę monitoring (loops: {loop_count})", "yellow"), flush=True)
                 break
             
             current_price = client.get_last_price(symbol)
             
+            # DEBUG: Co 6 iteracji (co ~1 min) pokaż status
+            if loop_count % 6 == 0:
+                print(colored(f"[{symbol}] 🔍 Monitor aktywny: Price={current_price:.6f} | TP hit: {tp_hit}", "blue"), flush=True)
+            
             if is_long:
-                # ✅ TP1: Przesuń SL na breakeven + bufor (w zysk)
-                if not tp_hit[0] and current_price >= tp_levels[0]:
+                if not tp_hit[0] and len(tp_levels) > 0 and current_price >= tp_levels[0]:
                     tp_hit[0] = True
-                    # Oblicz breakeven z buforem na zysk
-                    new_sl = entry_price * (1 + breakeven_buffer / 100)
-                    new_sl = math.ceil(new_sl / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} >= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
+                    
+                    new_sl = math.ceil(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 📐 Obliczony nowy SL: {new_sl:.6f} (old: {current_sl:.6f})", "yellow"), flush=True)
                     
                     if new_sl > current_sl:
+                        print(colored(f"[{symbol}] 📡 Wysyłam set_trading_stop...", "yellow"), flush=True)
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        print(colored(f"[{symbol}] 📥 API Response: {result}", "yellow"), flush=True)
+                        
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na +{breakeven_buffer}%: {new_sl:.4f} (entry: {entry_price:.4f})", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                        else:
+                            print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
+                    else:
+                        print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
                 
-                # TP2: Przesuń SL na TP1
-                elif not tp_hit[1] and current_price >= tp_levels[1]:
+                elif not tp_hit[1] and len(tp_levels) > 1 and current_price >= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
                     if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                 
-                # TP3: Przesuń SL na TP2
-                elif not tp_hit[2] and current_price >= tp_levels[2]:
+                elif not tp_hit[2] and len(tp_levels) > 2 and current_price >= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
                     if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
-                # ✅ TP1: Przesuń SL na breakeven - bufor (w zysk dla SHORT)
-                if not tp_hit[0] and current_price <= tp_levels[0]:
+                if not tp_hit[0] and len(tp_levels) > 0 and current_price <= tp_levels[0]:
                     tp_hit[0] = True
-                    # Oblicz breakeven z buforem na zysk (dla SHORT odejmujemy %)
-                    new_sl = entry_price * (1 - breakeven_buffer / 100)
-                    new_sl = math.floor(new_sl / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} <= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
+                    
+                    new_sl = math.floor(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 📐 Obliczony nowy SL: {new_sl:.6f} (old: {current_sl:.6f})", "yellow"), flush=True)
 
                     if new_sl < current_sl:
+                        print(colored(f"[{symbol}] 📡 Wysyłam set_trading_stop...", "yellow"), flush=True)
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        print(colored(f"[{symbol}] 📥 API Response: {result}", "yellow"), flush=True)
+                        
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na +{breakeven_buffer}%: {new_sl:.4f} (entry: {entry_price:.4f})", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                        else:
+                            print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
+                    else:
+                        print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
                 
-                # TP2: Przesuń SL na TP1
-                elif not tp_hit[1] and current_price <= tp_levels[1]:
+                elif not tp_hit[1] and len(tp_levels) > 1 and current_price <= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
                     if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                 
-                # TP3: Przesuń SL na TP2
-                elif not tp_hit[2] and current_price <= tp_levels[2]:
+                elif not tp_hit[2] and len(tp_levels) > 2 and current_price <= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
                     if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             jitter_sleep = random.uniform(9.5, 11.0)
             time.sleep(jitter_sleep)
             
         except Exception as e:
-            print(colored(f"[{symbol}] Błąd w monitoringu: {e}", "red"), flush=True)
+            print(colored(f"[{symbol}] ❌ EXCEPTION w monitoringu: {e}", "red", attrs=['bold']), flush=True)
+            import traceback
+            traceback.print_exc()
             time.sleep(30)
             break
 
 def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels, is_long, instrument_rules, stop_loss_price):
     """
-    Ustawia partial take profit zlecenia
+    Ustawia partial take profit zlecenia z pełną walidacją
     """
-    num_levels = len(tp_levels)
     min_order_qty = instrument_rules["minOrderQty"]
+    min_notional = instrument_rules["minNotional"]
+    qty_precision = instrument_rules["qtyPrecision"]
+    price_precision = instrument_rules["pricePrecision"]
     
-    quantities = calculate_partial_tp_quantities(total_qty, num_levels, instrument_rules["qtyStep"], min_order_qty)
+    print(colored(f"[{symbol}] 📊 Partial TP Setup:", "cyan"), flush=True)
+    print(colored(f"   Total Qty: {total_qty}", "cyan"), flush=True)
+    print(colored(f"   Min Order Qty: {min_order_qty}", "cyan"), flush=True)
+    print(colored(f"   Min Notional: {min_notional} USDT", "cyan"), flush=True)
+    print(colored(f"   Requested TP Levels: {len(tp_levels)}", "cyan"), flush=True)
+    
+    # Zaokrąglij total_qty do precyzji
+    total_qty = round_to_precision(total_qty, qty_precision)
+    
+    # Oblicz quantities z uwzględnieniem min_notional
+    quantities = calculate_partial_tp_quantities(
+        total_qty, 
+        tp_levels, 
+        instrument_rules["qtyStep"], 
+        min_order_qty,
+        min_notional
+    )
     
     actual_tp_count = len(quantities)
     active_tp_levels = tp_levels[:actual_tp_count]
     
     side = "Sell" if is_long else "Buy"
     
-    print(colored(f"[{symbol}] 🎯 Ustawiam {actual_tp_count}/{num_levels} poziomów Partial TP (total: {total_qty}):", "cyan"), flush=True)
+    print(colored(f"[{symbol}] 🎯 Ustawiam {actual_tp_count} poziomów TP:", "cyan"), flush=True)
     
     successful_orders = 0
     
     for i, (tp_price, qty) in enumerate(zip(active_tp_levels, quantities), 1):
+        # Zaokrąglij do precyzji
+        qty = round_to_precision(qty, qty_precision)
+        tp_price = round_to_precision(tp_price, price_precision)
+        
         if qty <= 0:
-            print(colored(f"   TP{i}: Pomijam (qty = {qty})", "yellow"), flush=True)
+            print(colored(f"   ✗ TP{i}: Pominięto (qty = {qty})", "yellow"), flush=True)
             continue
         
+        # Walidacja qty
         if qty < min_order_qty:
-            print(colored(f"   ⚠️  TP{i}: qty {qty} < minimum {min_order_qty} (próbuję mimo to)", "yellow"), flush=True)
+            print(colored(f"   ✗ TP{i}: POMINIĘTO - qty {qty} < min {min_order_qty}", "red"), flush=True)
+            continue
+        
+        # Walidacja notional value
+        is_valid, notional_value = validate_order_value(qty, tp_price, min_notional)
+        if not is_valid:
+            print(colored(f"   ✗ TP{i}: POMINIĘTO - notional {notional_value:.2f} < min {min_notional}", "red"), flush=True)
+            continue
         
         try:
             result = client.place_tp_sl_order(
@@ -716,23 +837,29 @@ def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels
             
             if result and result.get('retCode') == 0:
                 successful_orders += 1
-                print(colored(f"   ✓ TP{i}: {tp_price:.4f} ({qty} {symbol.replace('USDT', '')})", "green"), flush=True)
+                print(colored(f"   ✓ TP{i}: {tp_price:.{price_precision}f} × {qty} = {notional_value:.2f} USDT", "green"), flush=True)
             else:
-                print(colored(f"   ✗ TP{i}: Błąd - {result.get('retMsg') if result else 'brak odpowiedzi'}", "red"), flush=True)
+                error_msg = result.get('retMsg') if result else 'brak odpowiedzi'
+                print(colored(f"   ✗ TP{i}: Błąd API - {error_msg}", "red"), flush=True)
             
             time.sleep(0.2)
             
         except Exception as e:
             print(colored(f"   ✗ TP{i}: Exception - {e}", "red"), flush=True)
     
+    # Ustaw główny Stop Loss
     if stop_loss_price:
-        client.set_trading_stop(symbol, stop_loss=stop_loss_price)
-        print(colored(f"   ✓ Stop Loss: {stop_loss_price:.4f}", "red"), flush=True)
+        stop_loss_price = round_to_precision(stop_loss_price, price_precision)
+        result = client.set_trading_stop(symbol, stop_loss=stop_loss_price)
+        if result and result.get('retCode') == 0:
+            print(colored(f"   ✓ Stop Loss: {stop_loss_price:.{price_precision}f}", "red"), flush=True)
+        else:
+            print(colored(f"   ✗ Stop Loss ERROR: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
     
     if successful_orders > 0:
-        print(colored(f"[{symbol}] ✅ Ustawiono {successful_orders}/{actual_tp_count} poziomów TP + SL", "green", attrs=['bold']), flush=True)
+        print(colored(f"[{symbol}] ✅ Sukces: {successful_orders}/{actual_tp_count} TP + SL", "green", attrs=['bold']), flush=True)
     else:
-        print(colored(f"[{symbol}] ⚠️  Ustawiono 0/{actual_tp_count} TP (tylko SL aktywny)", "yellow", attrs=['bold']), flush=True)
+        print(colored(f"[{symbol}] ⚠️  Tylko SL aktywny (0/{actual_tp_count} TP)", "yellow", attrs=['bold']), flush=True)
     
     return successful_orders
 
@@ -745,12 +872,10 @@ def run_legendx_strategy(config):
     symbol = config['symbol']
     interval = config['interval']
     leverage = config.get('leverage', '20')
-    breakeven_buffer = config.get('breakeven_buffer_perc', 0.3)
     
     print(colored(f"\n{'='*70}", "cyan"))
     print(colored(f"[{symbol}] Bot Legendx uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał: {interval}m | MA: {config['ma_choice']} ({config['ma_period']}) | Ryzyko: {config['risk_percentage']}% | Leverage: {leverage}x", "cyan"))
-    print(colored(f"[{symbol}] ✅ Breakeven Buffer: +{breakeven_buffer}% (pokrywa opłaty + slippage)", "green"))
     print(colored(f"{'='*70}\n", "cyan"))
     
     leverage_set = False
@@ -864,7 +989,7 @@ def run_legendx_strategy(config):
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # Przelicz SL od rzeczywistej ceny wejścia
+                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
                                 stop_loss_price = entry_price * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
                                 stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
                                 
@@ -892,14 +1017,13 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
-                                # ✅ Przekazujemy config do funkcji monitoringu
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules, config)
+                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (bufor: +{breakeven_buffer}%)", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "green"))
                             else:
@@ -944,7 +1068,7 @@ def run_legendx_strategy(config):
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # Przelicz SL od rzeczywistej ceny wejścia
+                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
                                 stop_loss_price = entry_price * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
                                 stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
                                 
@@ -972,14 +1096,13 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
-                                # ✅ Przekazujemy config do funkcji monitoringu
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules, config)
+                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (bufor: +{breakeven_buffer}%)", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "red"))
                             else:
@@ -1015,7 +1138,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT BOT | 3TP + Breakeven + Reverse + SL FIX + BUFFER", "white", attrs=['bold']))
+    print(colored("    BYBIT BOT | 3TP + Breakeven + Reverse + SL FIX", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1037,7 +1160,7 @@ def validate_config(config):
 if __name__ == "__main__":
     print_banner()
     
-    if "TWOJ" in API_KEY:
+    if "TWOJ" in API_KEY or "CxQFjz7JivQbTnihTP" in API_KEY:
         print(colored("\n⚠️  UWAGA: Nie ustawiono prawdziwych kluczy API!", "yellow", attrs=['bold']))
         print(colored("Edytuj plik i ustaw API_KEY oraz API_SECRET\n", "yellow"))
         print(colored("TESTUJ ZAWSZE NA TESTNET NAJPIERW!", "red", attrs=['bold']))
@@ -1052,14 +1175,12 @@ if __name__ == "__main__":
             continue
         
         print(f"\n{colored(f'Bot #{i}:', 'cyan', attrs=['bold'])}")
-        buffer_value = config.get('breakeven_buffer_perc', 0.3)
         print(f"  Symbol:        {colored(config['symbol'], 'white', attrs=['bold'])}")
         print(f"  Interwał:      {config['interval']} minut")
         print(f"  MA Type:       {config['ma_choice']} ({config['ma_period']})")
         print(f"  Ryzyko:        {config['risk_percentage']}%")
         print(f"  TP Levels:     {config['tp_levels']}")
         print(f"  Leverage:      {config.get('leverage', '20')}x")
-        print(f"  BE Buffer:     {colored(f'+{buffer_value}%', 'green')} (na zysk)")
     
     print(colored("\n" + "="*70, "cyan"))
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
