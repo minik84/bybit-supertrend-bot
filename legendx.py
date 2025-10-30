@@ -1052,13 +1052,14 @@ if __name__ == "__main__":
             continue
         
         print(f"\n{colored(f'Bot #{i}:', 'cyan', attrs=['bold'])}")
+        buffer_value = config.get('breakeven_buffer_perc', 0.3)
         print(f"  Symbol:        {colored(config['symbol'], 'white', attrs=['bold'])}")
         print(f"  Interwał:      {config['interval']} minut")
         print(f"  MA Type:       {config['ma_choice']} ({config['ma_period']})")
         print(f"  Ryzyko:        {config['risk_percentage']}%")
         print(f"  TP Levels:     {config['tp_levels']}")
         print(f"  Leverage:      {config.get('leverage', '20')}x")
-        print(f"  BE Buffer:     {colored(f\"+{config.get('breakeven_buffer_perc', 0.3)}%\", 'green')} (na zysk)")
+        print(f"  BE Buffer:     {colored(f'+{buffer_value}%', 'green')} (na zysk)")
     
     print(colored("\n" + "="*70, "cyan"))
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
