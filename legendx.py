@@ -4,6 +4,11 @@
     BOT LEGENDX - BYBIT TRADING
     Strategia bazowana na MA + ATR + Standard Deviation
     3 poziomy Take Profit | Breakeven Management | Risk Management
+    
+    Wersja zmodyfikowana:
+    - Naprawiono błędy Rate Limit (Jitter)
+    - Poprawiono logikę Breakeven (TP1)
+    - Wdrożono logikę "Reverse" (odwracanie pozycji)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -15,6 +20,7 @@ import json
 import datetime
 import threading
 import math
+import random  # ZMIANA: Dodano import random dla jittera
 from termcolor import colored
 
 # ==============================================================================
@@ -27,7 +33,6 @@ BASE_URL = "https://api.bybit.com"  # Produkcja
 
 # ==============================================================================
 # === PREDEFINIOWANE KONFIGURACJE (PRESETY) ===
-# Wszystkie parametry z oryginalnej strategii Legendx PineScript
 # ==============================================================================
 
 PRESETS = {
@@ -576,10 +581,14 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
             # Możemy tylko 1 TP (lub total_qty < minimum, ale i tak użyjemy całość)
             return [total_qty]
 
+# ==============================================================================
+# === ZMIANA: FUNKCJA MONITORUJĄCA (BREAKEVEN + JITTER) ===
+# ==============================================================================
+
 def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules):
     """
     Monitoruje pozycję i zarządza Stop Loss:
-    - Po trafieniu TP1: przesuwa SL na breakeven (entry price)
+    - Po trafieniu TP1: przesuwa SL na breakeven (entry price) - z poprawnym zaokrąglaniem
     - Po trafieniu TP2: przesuwa SL na TP1
     - Po trafieniu TP3: przesuwa SL na TP2
     """
@@ -603,63 +612,82 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 # LONG: sprawdź czy cena osiągnęła TP
                 if not tp_hit[0] and current_price >= tp_levels[0]:
                     tp_hit[0] = True
-                    # Przesuń SL na breakeven
-                    new_sl = round_to_tick(entry_price, instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                    
+                    # ZMIANA: Zawsze zaokrąglaj BE w górę (na korzyść) do najbliższego ticka
+                    new_sl = math.ceil(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    
+                    # Przesuń SL tylko jeśli jest lepszy niż obecny
+                    if new_sl > current_sl:
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
                 elif not tp_hit[1] and current_price >= tp_levels[1]:
                     tp_hit[1] = True
                     # Przesuń SL na TP1
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                    if new_sl > current_sl: # Przesuń tylko jeśli jest lepszy
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
                 elif not tp_hit[2] and current_price >= tp_levels[2]:
                     tp_hit[2] = True
                     # Przesuń SL na TP2
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                    if new_sl > current_sl: # Przesuń tylko jeśli jest lepszy
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
                 # SHORT: sprawdź czy cena osiągnęła TP (cena spada)
                 if not tp_hit[0] and current_price <= tp_levels[0]:
                     tp_hit[0] = True
-                    new_sl = round_to_tick(entry_price, instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+
+                    # ZMIANA: Zawsze zaokrąglaj BE w dół (na korzyść) do najbliższego ticka
+                    new_sl = math.floor(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+
+                    # Przesuń SL tylko jeśli jest lepszy niż obecny
+                    if new_sl < current_sl:
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
                 elif not tp_hit[1] and current_price <= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                    if new_sl < current_sl: # Przesuń tylko jeśli jest lepszy
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
                 elif not tp_hit[2] and current_price <= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                    if result and result.get('retCode') == 0:
-                        current_sl = new_sl
-                        print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                    if new_sl < current_sl: # Przesuń tylko jeśli jest lepszy
+                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                        if result and result.get('retCode') == 0:
+                            current_sl = new_sl
+                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
             
-            time.sleep(10)  # Sprawdzaj co 10 sekund
+            # ZMIANA: Dodano Jitter (losowe opóźnienie) aby uniknąć rate limit
+            jitter_sleep = random.uniform(9.5, 11.0) # Średnio co ~10.25s
+            time.sleep(jitter_sleep)
             
         except Exception as e:
             print(colored(f"[{symbol}] Błąd w monitoringu: {e}", "red"), flush=True)
             time.sleep(30)
             break
+
+# ==============================================================================
+# (Koniec zmian w funkcji monitorującej)
+# ==============================================================================
 
 def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels, is_long, instrument_rules, stop_loss_price):
     """
@@ -812,132 +840,185 @@ def run_legendx_strategy(config):
             else:
                 print(f"[{symbol}][{timestamp}] 📊 {price_str} | {long_str} {short_str} | {colored('No Position', 'yellow')}", flush=True)
             
-            # === LOGIKA WEJŚCIA ===
+            # ==================================================================
+            # === ZMIANA: LOGIKA WEJŚCIA (Z FUNKCJĄ REVERSE) ===
+            # ==================================================================
             
-            # LONG entry
-            if position_side == "None" and current_price >= long_trigger * 0.99:
-                balance = client.get_wallet_balance()
-                stop_loss_price = long_trigger * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
-                stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+            long_signal_active = current_price >= long_trigger * 0.99
+            short_signal_active = current_price <= short_trigger * 1.01
+
+            # --- 1. LOGIKA DLA SYGNAŁU LONG ---
+            if long_signal_active:
                 
-                qty = calculate_position_size(balance, long_trigger, stop_loss_price, config['risk_percentage'], instrument_rules)
-                
-                if qty > 0:
+                # REVERSE: Jeśli mamy shorta, a jest sygnał long, zamykamy shorta
+                if position_side == "Sell":
                     print(colored(f"\n{'='*70}", "green", attrs=['bold']))
-                    print(colored(f"[{symbol}] 🚀 SYGNAŁ LONG!", "green", attrs=['bold']))
-                    print(colored(f"{'='*70}", "green", attrs=['bold']))
-                    print(f"Entry: {long_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
+                    print(colored(f"[{symbol}] 🔄 REVERSE SYGNAŁ: SHORT ➔ LONG", "green", attrs=['bold']))
                     
-                    # 1. Otwórz pozycję Market
-                    result = client.place_order(symbol, "Buy", qty)
+                    # 1. Anuluj wszystkie stare zlecenia TP/SL
+                    client.cancel_all_orders(symbol)
+                    time.sleep(0.5)
                     
-                    if result and result.get('retCode') == 0:
-                        time.sleep(2)
-                        
-                        # 2. Pobierz średnią cenę wejścia
-                        _, position_size_check, entry_price = client.get_position(symbol)
-                        
-                        if entry_price > 0 and position_size_check > 0:
-                            # 3. Oblicz poziomy TP
-                            tp_levels = calculate_tp_levels(
-                                entry_price,
-                                config['tp_levels'],
-                                config['renorm_coeff'],
-                                True,
-                                instrument_rules["tickSize"]
-                            )
-                            
-                            # 4. Anuluj stare zlecenia
-                            client.cancel_all_orders(symbol)
-                            time.sleep(0.5)
-                            
-                            # 5. Ustaw PARTIAL TAKE PROFITS
-                            place_partial_take_profits(
-                                client,
-                                symbol,
-                                entry_price,
-                                position_size_check,
-                                tp_levels,
-                                True,
-                                instrument_rules,
-                                stop_loss_price
-                            )
-                            
-                            # 6. Uruchom monitoring breakeven
-                            monitor_thread = threading.Thread(
-                                target=monitor_and_manage_position,
-                                args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
-                            )
-                            monitor_thread.daemon = True
-                            monitor_thread.start()
-                            print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
-                            
-                            print(colored(f"{'='*70}\n", "green"))
-                        else:
-                            print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
-            
-            # SHORT entry
-            elif position_side == "None" and current_price <= short_trigger * 1.01:
-                balance = client.get_wallet_balance()
-                stop_loss_price = short_trigger * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
-                stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+                    # 2. Zamknij pozycję SHORT (order reduce_only)
+                    _, position_size_to_close, _ = client.get_position(symbol)
+                    if position_size_to_close > 0:
+                        client.place_order(symbol, "Buy", position_size_to_close, reduce_only=True)
+                        print(colored(f"[{symbol}] --- Zamknięto {position_size_to_close} SHORT", "yellow"), flush=True)
+                        time.sleep(2.0) # Poczekaj na realizację zamknięcia
+                    
+                    # 3. Ustawiamy flagę, że jesteśmy gotowi do otwarcia nowej
+                    position_side = "None"
                 
-                qty = calculate_position_size(balance, short_trigger, stop_loss_price, config['risk_percentage'], instrument_rules)
+                # WEJŚCIE LONG: Jeśli nie ma pozycji (bo właśnie zamknęliśmy lub nie było)
+                if position_side == "None":
+                    balance = client.get_wallet_balance()
+                    stop_loss_price = long_trigger * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
+                    stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+                    
+                    qty = calculate_position_size(balance, long_trigger, stop_loss_price, config['risk_percentage'], instrument_rules)
+                    
+                    if qty > 0:
+                        print(colored(f"\n{'='*70}", "green", attrs=['bold']))
+                        print(colored(f"[{symbol}] 🚀 SYGNAŁ LONG!", "green", attrs=['bold']))
+                        print(colored(f"{'='*70}", "green", attrs=['bold']))
+                        print(f"Entry: {long_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
+                        
+                        # 1. Otwórz pozycję Market
+                        result = client.place_order(symbol, "Buy", qty)
+                        
+                        if result and result.get('retCode') == 0:
+                            time.sleep(2)
+                            
+                            # 2. Pobierz średnią cenę wejścia
+                            _, position_size_check, entry_price = client.get_position(symbol)
+                            
+                            if entry_price > 0 and position_size_check > 0:
+                                # 3. Oblicz poziomy TP
+                                tp_levels = calculate_tp_levels(
+                                    entry_price,
+                                    config['tp_levels'],
+                                    config['renorm_coeff'],
+                                    True,
+                                    instrument_rules["tickSize"]
+                                )
+                                
+                                # 4. Anuluj stare zlecenia (na wszelki wypadek)
+                                client.cancel_all_orders(symbol)
+                                time.sleep(0.5)
+                                
+                                # 5. Ustaw PARTIAL TAKE PROFITS
+                                place_partial_take_profits(
+                                    client,
+                                    symbol,
+                                    entry_price,
+                                    position_size_check,
+                                    tp_levels,
+                                    True,
+                                    instrument_rules,
+                                    stop_loss_price
+                                )
+                                
+                                # 6. Uruchom monitoring breakeven
+                                monitor_thread = threading.Thread(
+                                    target=monitor_and_manage_position,
+                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
+                                )
+                                monitor_thread.daemon = True
+                                monitor_thread.start()
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                
+                                print(colored(f"{'='*70}\n", "green"))
+                            else:
+                                print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
+
+            # --- 2. LOGIKA DLA SYGNAŁU SHORT ---
+            elif short_signal_active:
                 
-                if qty > 0:
+                # REVERSE: Jeśli mamy longa, a jest sygnał short, zamykamy longa
+                if position_side == "Buy":
                     print(colored(f"\n{'='*70}", "red", attrs=['bold']))
-                    print(colored(f"[{symbol}] ⚠️ SYGNAŁ SHORT!", "red", attrs=['bold']))
-                    print(colored(f"{'='*70}", "red", attrs=['bold']))
-                    print(f"Entry: {short_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
+                    print(colored(f"[{symbol}] 🔄 REVERSE SYGNAŁ: LONG ➔ SHORT", "red", attrs=['bold']))
                     
-                    # 1. Otwórz pozycję Market
-                    result = client.place_order(symbol, "Sell", qty)
+                    # 1. Anuluj wszystkie stare zlecenia TP/SL
+                    client.cancel_all_orders(symbol)
+                    time.sleep(0.5)
                     
-                    if result and result.get('retCode') == 0:
-                        time.sleep(2)
+                    # 2. Zamknij pozycję LONG (order reduce_only)
+                    _, position_size_to_close, _ = client.get_position(symbol)
+                    if position_size_to_close > 0:
+                        client.place_order(symbol, "Sell", position_size_to_close, reduce_only=True)
+                        print(colored(f"[{symbol}] --- Zamknięto {position_size_to_close} LONG", "yellow"), flush=True)
+                        time.sleep(2.0) # Poczekaj na realizację zamknięcia
+                    
+                    # 3. Ustawiamy flagę, że jesteśmy gotowi do otwarcia nowej
+                    position_side = "None"
+
+                # WEJŚCIE SHORT: Jeśli nie ma pozycji (bo właśnie zamknęliśmy lub nie było)
+                if position_side == "None":
+                    balance = client.get_wallet_balance()
+                    stop_loss_price = short_trigger * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
+                    stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
+                    
+                    qty = calculate_position_size(balance, short_trigger, stop_loss_price, config['risk_percentage'], instrument_rules)
+                    
+                    if qty > 0:
+                        print(colored(f"\n{'='*70}", "red", attrs=['bold']))
+                        print(colored(f"[{symbol}] ⚠️ SYGNAŁ SHORT!", "red", attrs=['bold']))
+                        print(colored(f"{'='*70}", "red", attrs=['bold']))
+                        print(f"Entry: {short_trigger:.4f} | SL: {stop_loss_price:.4f} | Qty: {qty}", flush=True)
                         
-                        # 2. Pobierz średnią cenę wejścia
-                        _, position_size_check, entry_price = client.get_position(symbol)
+                        # 1. Otwórz pozycję Market
+                        result = client.place_order(symbol, "Sell", qty)
                         
-                        if entry_price > 0 and position_size_check > 0:
-                            # 3. Oblicz poziomy TP
-                            tp_levels = calculate_tp_levels(
-                                entry_price,
-                                config['tp_levels'],
-                                config['renorm_coeff'],
-                                False,
-                                instrument_rules["tickSize"]
-                            )
+                        if result and result.get('retCode') == 0:
+                            time.sleep(2)
                             
-                            # 4. Anuluj stare zlecenia
-                            client.cancel_all_orders(symbol)
-                            time.sleep(0.5)
+                            # 2. Pobierz średnią cenę wejścia
+                            _, position_size_check, entry_price = client.get_position(symbol)
                             
-                            # 5. Ustaw PARTIAL TAKE PROFITS
-                            place_partial_take_profits(
-                                client,
-                                symbol,
-                                entry_price,
-                                position_size_check,
-                                tp_levels,
-                                False,
-                                instrument_rules,
-                                stop_loss_price
-                            )
-                            
-                            # 6. Uruchom monitoring breakeven
-                            monitor_thread = threading.Thread(
-                                target=monitor_and_manage_position,
-                                args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
-                            )
-                            monitor_thread.daemon = True
-                            monitor_thread.start()
-                            print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
-                            
-                            print(colored(f"{'='*70}\n", "red"))
-                        else:
-                            print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
+                            if entry_price > 0 and position_size_check > 0:
+                                # 3. Oblicz poziomy TP
+                                tp_levels = calculate_tp_levels(
+                                    entry_price,
+                                    config['tp_levels'],
+                                    config['renorm_coeff'],
+                                    False,
+                                    instrument_rules["tickSize"]
+                                )
+                                
+                                # 4. Anuluj stare zlecenia
+                                client.cancel_all_orders(symbol)
+                                time.sleep(0.5)
+                                
+                                # 5. Ustaw PARTIAL TAKE PROFITS
+                                place_partial_take_profits(
+                                    client,
+                                    symbol,
+                                    entry_price,
+                                    position_size_check,
+                                    tp_levels,
+                                    False,
+                                    instrument_rules,
+                                    stop_loss_price
+                                )
+                                
+                                # 6. Uruchom monitoring breakeven
+                                monitor_thread = threading.Thread(
+                                    target=monitor_and_manage_position,
+                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
+                                )
+                                monitor_thread.daemon = True
+                                monitor_thread.start()
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                
+                                print(colored(f"{'='*70}\n", "red"))
+                            else:
+                                print(colored(f"[{symbol}] ⚠️ Pozycja nie znaleziona po otwarciu", "yellow"), flush=True)
             
+            # ==================================================================
+            # === KONIEC ZMIAN W LOGICE WEJŚCIA ===
+            # ==================================================================
+
             # Czekaj do następnej świecy
             now = datetime.datetime.now(datetime.timezone.utc)
             interval_minutes = int(interval)
@@ -947,6 +1028,9 @@ def run_legendx_strategy(config):
             if seconds_to_wait > 0:
                 print(colored(f"[{symbol}] ⏱️  Następna świeca za {int(seconds_to_wait)}s\n", "blue"), flush=True)
                 time.sleep(seconds_to_wait)
+            
+            # ZMIANA: Jitter, aby zdesynchronizować zapytania API między wątkami
+            time.sleep(random.uniform(0.1, 2.0))
             
         except Exception as e:
             print(colored(f"[{symbol}] ❌ BŁĄD: {e}", "red", attrs=['bold']), flush=True)
@@ -967,7 +1051,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT TRADING BOT | 3 TP + Breakeven Management", "white", attrs=['bold']))
+    print(colored("    BYBIT TRADING BOT | 3 TP + Breakeven Management + Reverse", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1044,7 +1128,7 @@ if __name__ == "__main__":
         for thread in threads:
             thread.join()
     except KeyboardInterrupt:
-        print(colored("\n\n⚠️  Zatrzymywanie botów...", "yellow", attrs=['bold']))
+        print(colored("\n\n⚠️  Zatrzymywanie botów...", "yellow",attrs=['bold']))
         print(colored("="*70, "yellow"))
         print(colored("✓ Boty zatrzymane. Do zobaczenia!", "green"))
         print(colored("="*70 + "\n", "yellow"))
