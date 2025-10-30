@@ -11,6 +11,7 @@
     - ✅ Poprawiono logikę Breakeven (math.ceil/floor)
     - ✅ Wdrożono logikę "Reverse" (odwracanie pozycji)
     - ✅ Adaptywne TP (wykorzystuje całą qty)
+    - ✅ BREAKEVEN BUFFER - przesuwa SL delikatnie NA ZYSK (pokrywa opłaty)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -46,7 +47,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 13, "std_coeff_short": 1.3, "atr_period_short": 9, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.3, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3  # ✅ Bufor breakeven: 0.3% w zysk
     },
     
     "BTCUSDT_30m": {
@@ -55,7 +57,8 @@ PRESETS = {
         "ma_distance_perc_long": 2.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 12, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "ETHUSDT_30m": {
@@ -64,7 +67,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 11, "std_coeff_short": 0.5, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     # ========== 15 MINUT ==========
@@ -75,7 +79,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.4,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "AUDIOUSDT_15m": {
@@ -84,7 +89,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 7, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.0,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
+        "breakeven_buffer_perc": 0.3
     },
     
     "BELUSDT_15m": {
@@ -93,7 +99,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
+        "breakeven_buffer_perc": 0.3
     },
     
     "EGLDUSDT_15m": {
@@ -102,7 +109,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 2.0, "atr_period_short": 14, "atr_coeff_short": 2.4,
         "ma_distance_perc_short": 1.9, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "GRTUSDT_15m": {
@@ -111,7 +119,8 @@ PRESETS = {
         "ma_distance_perc_long": 2.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.3, "atr_period_short": 14, "atr_coeff_short": 1.3,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "NEARUSDT_15m": {
@@ -120,7 +129,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "ONEUSDT_15m": {
@@ -129,7 +139,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10",
+        "breakeven_buffer_perc": 0.3
     },
     
     "RUNEUSDT_15m": {
@@ -138,7 +149,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.2,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "SANDUSDT_15m": {
@@ -147,7 +159,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.2, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "XRPUSDT_15m": {
@@ -156,7 +169,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
     
     "YFIUSDT_15m": {
@@ -165,7 +179,8 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20",
+        "breakeven_buffer_perc": 0.3
     },
 }
 
@@ -200,6 +215,7 @@ BOT_CONFIGS = [
 # Opcja: Zmień ryzyko dla wszystkich par
 for config in BOT_CONFIGS:
     config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
+    config['breakeven_buffer_perc'] = 0.3  # ✅ Bufor breakeven: 0.2-0.5% rekomendowane
 
 # ==============================================================================
 # === KLASA DO OBSŁUGI API BYBIT ===
@@ -520,7 +536,7 @@ def calculate_tp_levels(entry_price, tp_percentages, renorm_coeff, is_long, tick
 def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_qty):
     """
     Oblicza wielkości dla partial take profit
-    NOWA LOGIKA: Wykorzystaj całą qty nawet jeśli nie da się podzielić równo
+    LOGIKA: Wykorzystaj całą qty nawet jeśli nie da się podzielić równo
     """
     qty_per_level = total_qty / num_levels
     qty_per_level = round_to_step(qty_per_level, qty_step)
@@ -566,15 +582,16 @@ def calculate_partial_tp_quantities(total_qty, num_levels, qty_step, min_order_q
         else:
             return [total_qty]
 
-def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules):
+def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules, config):
     """
-    Monitoruje pozycję i zarządza Stop Loss:
-    - Po trafieniu TP1: przesuwa SL na breakeven (entry price)
+    Monitoruje pozycję i zarządza Stop Loss z buforem na zysk:
+    - Po trafieniu TP1: przesuwa SL na breakeven + BUFOR (np. +0.3%)
     - Po trafieniu TP2: przesuwa SL na TP1
     - Po trafieniu TP3: przesuwa SL na TP2
     """
     tp_hit = [False, False, False]
     current_sl = stop_loss_price
+    breakeven_buffer = config.get('breakeven_buffer_perc', 0.3)  # Domyślnie 0.3%
     
     while True:
         try:
@@ -587,16 +604,20 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
             current_price = client.get_last_price(symbol)
             
             if is_long:
+                # ✅ TP1: Przesuń SL na breakeven + bufor (w zysk)
                 if not tp_hit[0] and current_price >= tp_levels[0]:
                     tp_hit[0] = True
-                    new_sl = math.ceil(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    # Oblicz breakeven z buforem na zysk
+                    new_sl = entry_price * (1 + breakeven_buffer / 100)
+                    new_sl = math.ceil(new_sl / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
                     
                     if new_sl > current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na +{breakeven_buffer}%: {new_sl:.4f} (entry: {entry_price:.4f})", "green", attrs=['bold']), flush=True)
                 
+                # TP2: Przesuń SL na TP1
                 elif not tp_hit[1] and current_price >= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
@@ -606,6 +627,7 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                             current_sl = new_sl
                             print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
+                # TP3: Przesuń SL na TP2
                 elif not tp_hit[2] and current_price >= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
@@ -616,16 +638,20 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                             print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
+                # ✅ TP1: Przesuń SL na breakeven - bufor (w zysk dla SHORT)
                 if not tp_hit[0] and current_price <= tp_levels[0]:
                     tp_hit[0] = True
-                    new_sl = math.floor(entry_price / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    # Oblicz breakeven z buforem na zysk (dla SHORT odejmujemy %)
+                    new_sl = entry_price * (1 - breakeven_buffer / 100)
+                    new_sl = math.floor(new_sl / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
 
                     if new_sl < current_sl:
                         result = client.set_trading_stop(symbol, stop_loss=new_sl)
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na +{breakeven_buffer}%: {new_sl:.4f} (entry: {entry_price:.4f})", "green", attrs=['bold']), flush=True)
                 
+                # TP2: Przesuń SL na TP1
                 elif not tp_hit[1] and current_price <= tp_levels[1]:
                     tp_hit[1] = True
                     new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
@@ -635,6 +661,7 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                             current_sl = new_sl
                             print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.4f}", "green", attrs=['bold']), flush=True)
                 
+                # TP3: Przesuń SL na TP2
                 elif not tp_hit[2] and current_price <= tp_levels[2]:
                     tp_hit[2] = True
                     new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
@@ -718,10 +745,12 @@ def run_legendx_strategy(config):
     symbol = config['symbol']
     interval = config['interval']
     leverage = config.get('leverage', '20')
+    breakeven_buffer = config.get('breakeven_buffer_perc', 0.3)
     
     print(colored(f"\n{'='*70}", "cyan"))
     print(colored(f"[{symbol}] Bot Legendx uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał: {interval}m | MA: {config['ma_choice']} ({config['ma_period']}) | Ryzyko: {config['risk_percentage']}% | Leverage: {leverage}x", "cyan"))
+    print(colored(f"[{symbol}] ✅ Breakeven Buffer: +{breakeven_buffer}% (pokrywa opłaty + slippage)", "green"))
     print(colored(f"{'='*70}\n", "cyan"))
     
     leverage_set = False
@@ -835,7 +864,7 @@ def run_legendx_strategy(config):
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
+                                # Przelicz SL od rzeczywistej ceny wejścia
                                 stop_loss_price = entry_price * (1 - config['stop_loss_perc_long'] / 100 / config['renorm_coeff'])
                                 stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
                                 
@@ -863,13 +892,14 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
+                                # ✅ Przekazujemy config do funkcji monitoringu
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
+                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules, config)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (bufor: +{breakeven_buffer}%)", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "green"))
                             else:
@@ -914,7 +944,7 @@ def run_legendx_strategy(config):
                             _, position_size_check, entry_price = client.get_position(symbol)
                             
                             if entry_price > 0 and position_size_check > 0:
-                                # ✅ POPRAWKA: Przelicz SL od rzeczywistej ceny!
+                                # Przelicz SL od rzeczywistej ceny wejścia
                                 stop_loss_price = entry_price * (1 + config['stop_loss_perc_short'] / 100 / config['renorm_coeff'])
                                 stop_loss_price = round_to_tick(stop_loss_price, instrument_rules["tickSize"])
                                 
@@ -942,13 +972,14 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
+                                # ✅ Przekazujemy config do funkcji monitoringu
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
+                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules, config)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (bufor: +{breakeven_buffer}%)", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "red"))
                             else:
@@ -984,7 +1015,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT BOT | 3TP + Breakeven + Reverse + SL FIX", "white", attrs=['bold']))
+    print(colored("    BYBIT BOT | 3TP + Breakeven + Reverse + SL FIX + BUFFER", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1027,6 +1058,7 @@ if __name__ == "__main__":
         print(f"  Ryzyko:        {config['risk_percentage']}%")
         print(f"  TP Levels:     {config['tp_levels']}")
         print(f"  Leverage:      {config.get('leverage', '20')}x")
+        print(f"  BE Buffer:     {colored(f\"+{config.get('breakeven_buffer_perc', 0.3)}%\", 'green')} (na zysk)")
     
     print(colored("\n" + "="*70, "cyan"))
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
