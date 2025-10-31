@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════════════════════
     BOT LEGENDX - BYBIT TRADING
     Strategia bazowana na MA + ATR + Standard Deviation
-    3 poziomy Take Profit | Breakeven Management | Risk Management
+    5 poziomów Take Profit | Breakeven Management 0.5% | Risk Management
     
     Wersja poprawiona:
     - ✅ Naprawiono błąd SL (przelicza od rzeczywistej ceny wejścia)
@@ -11,6 +11,7 @@
     - ✅ Poprawiono logikę Breakeven (math.ceil/floor)
     - ✅ Wdrożono logikę "Reverse" (odwracanie pozycji)
     - ✅ Adaptywne TP (wykorzystuje całą qty)
+    - ✅ Breakeven buffer 0.5% (pokrywa fees + mały zysk)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -201,10 +202,14 @@ BOT_CONFIGS = [
 for config in BOT_CONFIGS:
     config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
 
-# === NOWY KOD: Ustawia 5 poziomów TP ===
+# === Ustawia 5 poziomów TP ===
 for config in BOT_CONFIGS:
     config['tp_levels'] = [2.0, 4.0, 8.0, 12.0, 16.0]
-# === KONIEC NOWEGO KODU ===
+
+# === Breakeven buffer - przesunięcie SL powyżej/poniżej entry ===
+for config in BOT_CONFIGS:
+    config['breakeven_buffer_perc'] = 0.5  # 0.5% od entry price
+# === KONIEC ===
 
 # ==============================================================================
 # === KLASA DO OBSŁUGI API BYBIT ===
@@ -654,27 +659,20 @@ def calculate_partial_tp_quantities(total_qty, tp_prices, qty_step, min_order_qt
     print(colored(f"   ⚠️  Nie można podzielić - używam 1 TP z całą qty", "yellow"), flush=True)
     return [total_qty]
 
-# ==============================================================================
-# === POCZĄTEK MODYFIKACJI - MONITORING POZYCJI ===
-# ==============================================================================
-
-def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules):
+def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules, breakeven_buffer_perc=0.5):
     """
     Monitoruje pozycję i zarządza Stop Loss:
-    - Po trafieniu TP1: Nic nie rób (tylko loguj)
-    - Po trafieniu TP2: przesuwa SL na breakeven z buforem +0.1% (entry price + 0.1%)
-    - Po trafieniu TP3: przesuwa SL na TP1
-    - Po trafieniu TP4: przesuwa SL na TP2
-    - Po trafieniu TP5: przesuwa SL na TP3
+    - Po trafieniu TP1: przesuwa SL na breakeven + buffer (entry price + 0.5%)
+    - Po trafieniu TP2: przesuwa SL na TP1
+    - Po trafieniu TP3: przesuwa SL na TP2
+    - itd.
     """
-    print(colored(f"[{symbol}] 🔍 MONITOR STARTUJE (Logika: BE na TP2):", "cyan"), flush=True)
+    print(colored(f"[{symbol}] 🔍 MONITOR STARTUJE:", "cyan"), flush=True)
     print(colored(f"   Entry: {entry_price:.6f}", "cyan"), flush=True)
     print(colored(f"   TP Levels: {[f'{tp:.6f}' for tp in tp_levels]}", "cyan"), flush=True)
     print(colored(f"   Initial SL: {stop_loss_price:.6f}", "cyan"), flush=True)
     print(colored(f"   Direction: {'LONG' if is_long else 'SHORT'}", "cyan"), flush=True)
-    
-    # Bufor dla Breakeven, aby zapewnić mały zysk (0.1%)
-    profit_buffer_perc = 0.1 
+    print(colored(f"   Breakeven Buffer: {breakeven_buffer_perc}%", "cyan"), flush=True)
     
     tp_hit = [False] * len(tp_levels)
     current_sl = stop_loss_price
@@ -697,22 +695,14 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                 print(colored(f"[{symbol}] 🔍 Monitor aktywny: Price={current_price:.6f} | TP hit: {tp_hit}", "blue"), flush=True)
             
             if is_long:
-                # === TP1 Hit (Index 0) - TYLKO ZANOTUJ ===
                 if not tp_hit[0] and len(tp_levels) > 0 and current_price >= tp_levels[0]:
                     tp_hit[0] = True
                     print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} >= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
-                    # Celowo nie robimy nic z SL
-
-                # === TP2 Hit (Index 1) - USTAW BREAKEVEN Z BUFOREM ===
-                elif not tp_hit[1] and len(tp_levels) > 1 and current_price >= tp_levels[1]:
-                    tp_hit[1] = True
-                    print(colored(f"[{symbol}] 🎯 TP2 WYKRYTY! Current: {current_price:.6f} >= TP2: {tp_levels[1]:.6f}", "yellow"), flush=True)
                     
-                    # Oblicz BE z buforem 0.1% zysku
-                    new_sl_raw = entry_price * (1 + profit_buffer_perc / 100)
-                    new_sl = math.ceil(new_sl_raw / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
-                    
-                    print(colored(f"[{symbol}] 📐 Obliczony nowy SL (BE+{profit_buffer_perc}%): {new_sl:.6f} (old: {current_sl:.6f})", "yellow"), flush=True)
+                    # NOWY KOD - z buforem 0.5%:
+                    breakeven_with_buffer = entry_price * (1 + breakeven_buffer_perc / 100)
+                    new_sl = math.ceil(breakeven_with_buffer / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 📐 Buffer: {breakeven_buffer_perc}% | Entry: {entry_price:.6f} → BE SL: {new_sl:.6f}", "yellow"), flush=True)
                     
                     if new_sl > current_sl:
                         print(colored(f"[{symbol}] 📡 Wysyłam set_trading_stop...", "yellow"), flush=True)
@@ -721,19 +711,17 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                         
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na BREAKEVEN+: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN+{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                         else:
                             print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
                 
-                # === TP3 i kolejne (Index 2+) - TRAILING SL ===
-                # Pętla dla TP3, TP4, TP5...
-                for i in range(2, len(tp_levels)): 
+                # Dynamiczna obsługa kolejnych TP
+                for i in range(1, len(tp_levels)):
                     if not tp_hit[i] and current_price >= tp_levels[i]:
                         tp_hit[i] = True
-                        # Przesuń SL na poprzedni poziom TP (TP3 -> SL na TP2; TP4 -> SL na TP3 itd.)
-                        # Poprawka: TP3 (i=2) -> SL na TP1 (i-2=0)? Nie. Na TP2 (i-1=1).
+                        # Przesuń SL na poprzedni poziom TP
                         new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
                         if new_sl > current_sl:
                             result = client.set_trading_stop(symbol, stop_loss=new_sl)
@@ -742,22 +730,14 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                                 print(colored(f"[{symbol}] ✅ TP{i+1} trafiony! SL przesunięty na TP{i}: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
-                # === TP1 Hit (Index 0) - TYLKO ZANOTUJ ===
                 if not tp_hit[0] and len(tp_levels) > 0 and current_price <= tp_levels[0]:
                     tp_hit[0] = True
                     print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} <= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
-                    # Celowo nie robimy nic z SL
-
-                # === TP2 Hit (Index 1) - USTAW BREAKEVEN Z BUFOREM ===
-                elif not tp_hit[1] and len(tp_levels) > 1 and current_price <= tp_levels[1]:
-                    tp_hit[1] = True
-                    print(colored(f"[{symbol}] 🎯 TP2 WYKRYTY! Current: {current_price:.6f} <= TP2: {tp_levels[1]:.6f}", "yellow"), flush=True)
                     
-                    # Oblicz BE z buforem 0.1% zysku
-                    new_sl_raw = entry_price * (1 - profit_buffer_perc / 100)
-                    new_sl = math.floor(new_sl_raw / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
-                    
-                    print(colored(f"[{symbol}] 📐 Obliczony nowy SL (BE-{profit_buffer_perc}%): {new_sl:.6f} (old: {current_sl:.6f})", "yellow"), flush=True)
+                    # NOWY KOD - z buforem 0.5%:
+                    breakeven_with_buffer = entry_price * (1 - breakeven_buffer_perc / 100)
+                    new_sl = math.floor(breakeven_with_buffer / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
+                    print(colored(f"[{symbol}] 📐 Buffer: {breakeven_buffer_perc}% | Entry: {entry_price:.6f} → BE SL: {new_sl:.6f}", "yellow"), flush=True)
 
                     if new_sl < current_sl:
                         print(colored(f"[{symbol}] 📡 Wysyłam set_trading_stop...", "yellow"), flush=True)
@@ -766,18 +746,17 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                         
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na BREAKEVEN-: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN-{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                         else:
                             print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
-                
-                # === TP3 i kolejne (Index 2+) - TRAILING SL ===
-                # Pętla dla TP3, TP4, TP5...
-                for i in range(2, len(tp_levels)):
+
+                # Dynamiczna obsługa kolejnych TP
+                for i in range(1, len(tp_levels)):
                     if not tp_hit[i] and current_price <= tp_levels[i]:
                         tp_hit[i] = True
-                        # Przesuń SL na poprzedni poziom TP (TP3 -> SL na TP2; TP4 -> SL na TP3 itd.)
+                        # Przesuń SL na poprzedni poziom TP
                         new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
                         if new_sl < current_sl:
                             result = client.set_trading_stop(symbol, stop_loss=new_sl)
@@ -794,11 +773,6 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
             traceback.print_exc()
             time.sleep(30)
             break
-
-# ==============================================================================
-# === KONIEC MODYFIKACJI - MONITORING POZYCJI ===
-# ==============================================================================
-
 
 def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels, is_long, instrument_rules, stop_loss_price):
     """
@@ -906,7 +880,8 @@ def run_legendx_strategy(config):
     print(colored(f"\n{'='*70}", "cyan"))
     print(colored(f"[{symbol}] Bot Legendx uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał: {interval}m | MA: {config['ma_choice']} ({config['ma_period']}) | Ryzyko: {config['risk_percentage']}% | Leverage: {leverage}x", "cyan"))
-    print(colored(f"[{symbol}] TP Levels: {config['tp_levels']}", "cyan")) # Dodano logowanie TP
+    print(colored(f"[{symbol}] TP Levels: {config['tp_levels']}", "cyan"))
+    print(colored(f"[{symbol}] Breakeven Buffer: {config.get('breakeven_buffer_perc', 0.5)}%", "cyan"))
     print(colored(f"{'='*70}\n", "cyan"))
     
     leverage_set = False
@@ -1050,7 +1025,7 @@ def run_legendx_strategy(config):
                                 
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules)
+                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules, config.get('breakeven_buffer_perc', 0.5))
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
@@ -1129,7 +1104,7 @@ def run_legendx_strategy(config):
                                 
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules)
+                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules, config.get('breakeven_buffer_perc', 0.5))
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
@@ -1169,7 +1144,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT BOT | 5TP + Breakeven (na TP2) + Reverse + SL FIX", "white", attrs=['bold']))
+    print(colored("    BYBIT BOT | 5TP + Breakeven 0.5% + Reverse + SL FIX", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1191,7 +1166,7 @@ def validate_config(config):
 if __name__ == "__main__":
     print_banner()
     
-    if "TWOJ" in API_KEY:
+    if "TWOJ" in API_KEY or len(API_KEY) < 10:
         print(colored("\n⚠️  UWAGA: Nie ustawiono prawdziwych kluczy API!", "yellow", attrs=['bold']))
         print(colored("Edytuj plik i ustaw API_KEY oraz API_SECRET\n", "yellow"))
         print(colored("TESTUJ ZAWSZE NA TESTNET NAJPIERW!", "red", attrs=['bold']))
@@ -1212,6 +1187,7 @@ if __name__ == "__main__":
         print(f"  Ryzyko:        {config['risk_percentage']}%")
         print(f"  TP Levels:     {config['tp_levels']}")
         print(f"  Leverage:      {config.get('leverage', '20')}x")
+        print(f"  BE Buffer:     {config.get('breakeven_buffer_perc', 0.5)}%")
     
     print(colored("\n" + "="*70, "cyan"))
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
