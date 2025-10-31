@@ -201,6 +201,11 @@ BOT_CONFIGS = [
 for config in BOT_CONFIGS:
     config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
 
+# === NOWY KOD: Ustawia 5 poziomów TP ===
+for config in BOT_CONFIGS:
+    config['tp_levels'] = [2.0, 4.0, 8.0, 12.0, 16.0]
+# === KONIEC NOWEGO KODU ===
+
 # ==============================================================================
 # === KLASA DO OBSŁUGI API BYBIT ===
 # ==============================================================================
@@ -662,7 +667,8 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
     print(colored(f"   Initial SL: {stop_loss_price:.6f}", "cyan"), flush=True)
     print(colored(f"   Direction: {'LONG' if is_long else 'SHORT'}", "cyan"), flush=True)
     
-    tp_hit = [False, False, False]
+    # Zmieniono z `[False, False, False]` na 5, aby obsłużyć więcej TP
+    tp_hit = [False] * len(tp_levels)
     current_sl = stop_loss_price
     loop_count = 0
     
@@ -703,23 +709,17 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
                 
-                elif not tp_hit[1] and len(tp_levels) > 1 and current_price >= tp_levels[1]:
-                    tp_hit[1] = True
-                    new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    if new_sl > current_sl:
-                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                        if result and result.get('retCode') == 0:
-                            current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
-                
-                elif not tp_hit[2] and len(tp_levels) > 2 and current_price >= tp_levels[2]:
-                    tp_hit[2] = True
-                    new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    if new_sl > current_sl:
-                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                        if result and result.get('retCode') == 0:
-                            current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                # Dynamiczna obsługa kolejnych TP
+                for i in range(1, len(tp_levels)):
+                    if not tp_hit[i] and current_price >= tp_levels[i]:
+                        tp_hit[i] = True
+                        # Przesuń SL na poprzedni poziom TP
+                        new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
+                        if new_sl > current_sl:
+                            result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                            if result and result.get('retCode') == 0:
+                                current_sl = new_sl
+                                print(colored(f"[{symbol}] ✅ TP{i+1} trafiony! SL przesunięty na TP{i}: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
                 if not tp_hit[0] and len(tp_levels) > 0 and current_price <= tp_levels[0]:
@@ -741,24 +741,18 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                             print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
-                
-                elif not tp_hit[1] and len(tp_levels) > 1 and current_price <= tp_levels[1]:
-                    tp_hit[1] = True
-                    new_sl = round_to_tick(tp_levels[0], instrument_rules["tickSize"])
-                    if new_sl < current_sl:
-                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                        if result and result.get('retCode') == 0:
-                            current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP2 trafiony! SL przesunięty na TP1: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
-                
-                elif not tp_hit[2] and len(tp_levels) > 2 and current_price <= tp_levels[2]:
-                    tp_hit[2] = True
-                    new_sl = round_to_tick(tp_levels[1], instrument_rules["tickSize"])
-                    if new_sl < current_sl:
-                        result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                        if result and result.get('retCode') == 0:
-                            current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP3 trafiony! SL przesunięty na TP2: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+
+                # Dynamiczna obsługa kolejnych TP
+                for i in range(1, len(tp_levels)):
+                    if not tp_hit[i] and current_price <= tp_levels[i]:
+                        tp_hit[i] = True
+                        # Przesuń SL na poprzedni poziom TP
+                        new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
+                        if new_sl < current_sl:
+                            result = client.set_trading_stop(symbol, stop_loss=new_sl)
+                            if result and result.get('retCode') == 0:
+                                current_sl = new_sl
+                                print(colored(f"[{symbol}] ✅ TP{i+1} trafiony! SL przesunięty na TP{i}: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             jitter_sleep = random.uniform(9.5, 11.0)
             time.sleep(jitter_sleep)
@@ -876,6 +870,7 @@ def run_legendx_strategy(config):
     print(colored(f"\n{'='*70}", "cyan"))
     print(colored(f"[{symbol}] Bot Legendx uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał: {interval}m | MA: {config['ma_choice']} ({config['ma_period']}) | Ryzyko: {config['risk_percentage']}% | Leverage: {leverage}x", "cyan"))
+    print(colored(f"[{symbol}] TP Levels: {config['tp_levels']}", "cyan")) # Dodano logowanie TP
     print(colored(f"{'='*70}\n", "cyan"))
     
     leverage_set = False
