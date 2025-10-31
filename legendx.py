@@ -1155,7 +1155,7 @@ def validate_config(config):
 if __name__ == "__main__":
     print_banner()
     
-    if "TWOJ" in API_KEY or "CxQFjz7JivQbTnihTP" in API_KEY:
+    if "TWOJ" in API_KEY:
         print(colored("\n⚠️  UWAGA: Nie ustawiono prawdziwych kluczy API!", "yellow", attrs=['bold']))
         print(colored("Edytuj plik i ustaw API_KEY oraz API_SECRET\n", "yellow"))
         print(colored("TESTUJ ZAWSZE NA TESTNET NAJPIERW!", "red", attrs=['bold']))
