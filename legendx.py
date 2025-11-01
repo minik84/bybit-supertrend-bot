@@ -3,15 +3,16 @@
 ═══════════════════════════════════════════════════════════════════════════════
     BOT LEGENDX - BYBIT TRADING
     Strategia bazowana na MA + ATR + Standard Deviation
-    5 poziomów Take Profit | Breakeven Management 0.5% | Risk Management
+    8 poziomów Take Profit | Breakeven przy TP4 (2.1%) | Risk Management
     
     Wersja poprawiona:
     - ✅ Naprawiono błąd SL (przelicza od rzeczywistej ceny wejścia)
     - ✅ Naprawiono błędy Rate Limit (Jitter)
-    - ✅ Poprawiono logikę Breakeven (math.ceil/floor)
     - ✅ Wdrożono logikę "Reverse" (odwracanie pozycji)
     - ✅ Adaptywne TP (wykorzystuje całą qty)
-    - ✅ Breakeven buffer 0.5% (pokrywa fees + mały zysk)
+    - ✅ STAŁY Breakeven buffer 0.5%
+    - ✅ 8 poziomów TP zgodnie z Pine Script (0.5%, 0.8%, 1.3%, 2.1%, 3.4%, 5.5%, 8.9%, 14.4%)
+    - ✅ DYNAMICZNY Breakeven (min(TP4, Przedostatni_Ustawiony_TP))
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -202,13 +203,18 @@ BOT_CONFIGS = [
 for config in BOT_CONFIGS:
     config['risk_percentage'] = 1.0  # Możesz zmienić na 0.5, 1.5, 2.0 itd.
 
-# === Ustawia 5 poziomów TP ===
+# === Ustawia 8 poziomów TP zgodnie z oryginalnym Pine Script ===
+# Wartości: 0.5%, 0.8%, 1.3%, 2.1%, 3.4%, 5.5%, 8.9%, 14.4%
+# Oparte na ciągu Fibonacciego dla maksymalnej efektywności
 for config in BOT_CONFIGS:
-    config['tp_levels'] = [2.0, 4.0, 8.0, 12.0, 16.0]
+    config['tp_levels'] = [0.5, 0.8, 1.3, 2.1, 3.4, 5.5, 8.9, 14.4]
 
-# === Breakeven buffer - przesunięcie SL powyżej/poniżej entry ===
+# === STAŁY Breakeven przy TP4 (2.1%) z buforem 0.5% ===
+# Po trafieniu TP4, SL przesuwa się na entry + 0.5%
+# Daje ~1.6% marginesu na korekty
 for config in BOT_CONFIGS:
-    config['breakeven_buffer_perc'] = 0.5  # 0.5% od entry price
+    config['breakeven_buffer_perc'] = 0.5
+    config['breakeven_tp_trigger'] = 4  # Aktywuje się przy TP4 (index 3, ale pokazujemy jako TP4)
 # === KONIEC ===
 
 # ==============================================================================
@@ -590,21 +596,19 @@ def calculate_partial_tp_quantities(total_qty, tp_prices, qty_step, min_order_qt
     
     Parametry:
     - total_qty: całkowita ilość do podzielenia
-    - tp_prices: lista cen TP [TP1, TP2, TP3]
+    - tp_prices: lista cen TP [TP1, TP2, TP3, ..., TP8]
     - qty_step: krok qty
     - min_order_qty: minimalna qty
     - min_notional: minimalna wartość transakcji (qty * price >= min_notional)
     
-    Przykłady dla XRP (min_qty=10, min_notional=5):
-    - 19.1 XRP @ 2.2 USDT → [19.1] (1 TP, bo nie da się podzielić)
-    - 25 XRP @ 2.2 USDT → [13, 12] (2 TP)
-    - 35 XRP @ 2.2 USDT → [12, 12, 11] (3 TP)
+    Bot automatycznie próbuje ustawić maksymalną liczbę TP, jaką pozwalają ograniczenia exchange.
+    Przy małym kapitale (200 USDT) może ustawić tylko 1-3 TP zamiast wszystkich 8.
     """
     
     num_levels = len(tp_prices)
     
     print(colored(f"   📊 Calculating TP quantities:", "cyan"), flush=True)
-    print(colored(f"      Total: {total_qty} | Levels: {num_levels}", "cyan"), flush=True)
+    print(colored(f"      Total: {total_qty} | Max Levels: {num_levels}", "cyan"), flush=True)
     print(colored(f"      Min Qty: {min_order_qty} | Min Notional: {min_notional} USDT", "cyan"), flush=True)
     
     # Specjalny przypadek: total_qty < minimum qty
@@ -649,7 +653,7 @@ def calculate_partial_tp_quantities(total_qty, tp_prices, qty_step, min_order_qt
             remaining -= qty
         
         if all_valid and len(temp_quantities) > 0:
-            print(colored(f"   ✅ Możliwe: {level_idx} poziomy TP", "green"), flush=True)
+            print(colored(f"   ✅ Możliwe: {level_idx} poziomy TP (z {num_levels})", "green"), flush=True)
             for idx, (qty, price) in enumerate(zip(temp_quantities, tp_prices[:len(temp_quantities)]), 1):
                 notional = qty * price
                 print(colored(f"      TP{idx}: {qty} @ {price:.4f} = {notional:.2f} USDT", "green"), flush=True)
@@ -659,24 +663,22 @@ def calculate_partial_tp_quantities(total_qty, tp_prices, qty_step, min_order_qt
     print(colored(f"   ⚠️  Nie można podzielić - używam 1 TP z całą qty", "yellow"), flush=True)
     return [total_qty]
 
-def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long, stop_loss_price, instrument_rules, breakeven_buffer_perc=0.5):
+def monitor_and_manage_position(client, symbol, entry_price, active_tp_levels, is_long, stop_loss_price, instrument_rules, breakeven_buffer_perc=0.5, dynamic_breakeven_tp_trigger=4):
     """
     Monitoruje pozycję i zarządza Stop Loss:
-    - Po trafieniu TP1: przesuwa SL na breakeven + buffer (entry price + 0.5%)
-    - Po trafieniu TP2: przesuwa SL na TP1
-    - Po trafieniu TP3: przesuwa SL na TP2
-    - itd.
+    - DYNAMICZNE przesunięcie: Po trafieniu DYNAMICZNEGO TP → SL na entry + 0.5%
     """
     print(colored(f"[{symbol}] 🔍 MONITOR STARTUJE:", "cyan"), flush=True)
     print(colored(f"   Entry: {entry_price:.6f}", "cyan"), flush=True)
-    print(colored(f"   TP Levels: {[f'{tp:.6f}' for tp in tp_levels]}", "cyan"), flush=True)
+    print(colored(f"   TP Levels: {[f'{tp:.6f}' for tp in active_tp_levels]} (Aktywnych: {len(active_tp_levels)})", "cyan"), flush=True)
     print(colored(f"   Initial SL: {stop_loss_price:.6f}", "cyan"), flush=True)
     print(colored(f"   Direction: {'LONG' if is_long else 'SHORT'}", "cyan"), flush=True)
-    print(colored(f"   Breakeven Buffer: {breakeven_buffer_perc}%", "cyan"), flush=True)
+    print(colored(f"   Breakeven: DYNAMICZNY przy TP{dynamic_breakeven_tp_trigger} z buforem {breakeven_buffer_perc}%", "cyan"), flush=True)
     
-    tp_hit = [False] * len(tp_levels)
+    tp_hit = [False] * len(active_tp_levels)
     current_sl = stop_loss_price
     loop_count = 0
+    breakeven_activated = False  # Flaga: czy już przesunęliśmy na breakeven
     
     while True:
         try:
@@ -692,14 +694,18 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
             
             # DEBUG: Co 6 iteracji (co ~1 min) pokaż status
             if loop_count % 6 == 0:
-                print(colored(f"[{symbol}] 🔍 Monitor aktywny: Price={current_price:.6f} | TP hit: {tp_hit}", "blue"), flush=True)
+                print(colored(f"[{symbol}] 🔍 Monitor aktywny: Price={current_price:.6f} | Breakeven: {breakeven_activated}", "blue"), flush=True)
+            
+            # Używamy dynamicznego triggera
+            be_trigger_index = dynamic_breakeven_tp_trigger - 1
             
             if is_long:
-                if not tp_hit[0] and len(tp_levels) > 0 and current_price >= tp_levels[0]:
-                    tp_hit[0] = True
-                    print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} >= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
+                # Sprawdź czy DYNAMICZNY TP został trafiony
+                if not breakeven_activated and be_trigger_index < len(active_tp_levels) and current_price >= active_tp_levels[be_trigger_index]:
+                    breakeven_activated = True
+                    print(colored(f"[{symbol}] 🎯 TP{dynamic_breakeven_tp_trigger} WYKRYTY! Current: {current_price:.6f} >= TP{dynamic_breakeven_tp_trigger}: {active_tp_levels[be_trigger_index]:.6f}", "yellow"), flush=True)
                     
-                    # NOWY KOD - z buforem 0.5%:
+                    # STAŁY BREAKEVEN z buforem 0.5%:
                     breakeven_with_buffer = entry_price * (1 + breakeven_buffer_perc / 100)
                     new_sl = math.ceil(breakeven_with_buffer / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
                     print(colored(f"[{symbol}] 📐 Buffer: {breakeven_buffer_perc}% | Entry: {entry_price:.6f} → BE SL: {new_sl:.6f}", "yellow"), flush=True)
@@ -711,30 +717,19 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                         
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN+{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP{dynamic_breakeven_tp_trigger} trafiony! SL przesunięty na BREAKEVEN+{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                         else:
                             print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
-                
-                # Dynamiczna obsługa kolejnych TP
-                for i in range(1, len(tp_levels)):
-                    if not tp_hit[i] and current_price >= tp_levels[i]:
-                        tp_hit[i] = True
-                        # Przesuń SL na poprzedni poziom TP
-                        new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
-                        if new_sl > current_sl:
-                            result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                            if result and result.get('retCode') == 0:
-                                current_sl = new_sl
-                                print(colored(f"[{symbol}] ✅ TP{i+1} trafiony! SL przesunięty na TP{i}: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             else:  # SHORT
-                if not tp_hit[0] and len(tp_levels) > 0 and current_price <= tp_levels[0]:
-                    tp_hit[0] = True
-                    print(colored(f"[{symbol}] 🎯 TP1 WYKRYTY! Current: {current_price:.6f} <= TP1: {tp_levels[0]:.6f}", "yellow"), flush=True)
+                # Sprawdź czy DYNAMICZNY TP został trafiony
+                if not breakeven_activated and be_trigger_index < len(active_tp_levels) and current_price <= active_tp_levels[be_trigger_index]:
+                    breakeven_activated = True
+                    print(colored(f"[{symbol}] 🎯 TP{dynamic_breakeven_tp_trigger} WYKRYTY! Current: {current_price:.6f} <= TP{dynamic_breakeven_tp_trigger}: {active_tp_levels[be_trigger_index]:.6f}", "yellow"), flush=True)
                     
-                    # NOWY KOD - z buforem 0.5%:
+                    # STAŁY BREAKEVEN z buforem 0.5%:
                     breakeven_with_buffer = entry_price * (1 - breakeven_buffer_perc / 100)
                     new_sl = math.floor(breakeven_with_buffer / instrument_rules["tickSize"]) * instrument_rules["tickSize"]
                     print(colored(f"[{symbol}] 📐 Buffer: {breakeven_buffer_perc}% | Entry: {entry_price:.6f} → BE SL: {new_sl:.6f}", "yellow"), flush=True)
@@ -746,23 +741,11 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
                         
                         if result and result.get('retCode') == 0:
                             current_sl = new_sl
-                            print(colored(f"[{symbol}] ✅ TP1 trafiony! SL przesunięty na BREAKEVEN-{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
+                            print(colored(f"[{symbol}] ✅ TP{dynamic_breakeven_tp_trigger} trafiony! SL przesunięty na BREAKEVEN-{breakeven_buffer_perc}%: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
                         else:
                             print(colored(f"[{symbol}] ❌ Błąd API: {result.get('retMsg') if result else 'No response'}", "red"), flush=True)
                     else:
                         print(colored(f"[{symbol}] ⚠️ Nowy SL ({new_sl:.6f}) NIE lepszy od current ({current_sl:.6f})", "yellow"), flush=True)
-
-                # Dynamiczna obsługa kolejnych TP
-                for i in range(1, len(tp_levels)):
-                    if not tp_hit[i] and current_price <= tp_levels[i]:
-                        tp_hit[i] = True
-                        # Przesuń SL na poprzedni poziom TP
-                        new_sl = round_to_tick(tp_levels[i-1], instrument_rules["tickSize"])
-                        if new_sl < current_sl:
-                            result = client.set_trading_stop(symbol, stop_loss=new_sl)
-                            if result and result.get('retCode') == 0:
-                                current_sl = new_sl
-                                print(colored(f"[{symbol}] ✅ TP{i+1} trafiony! SL przesunięty na TP{i}: {new_sl:.6f}", "green", attrs=['bold']), flush=True)
             
             jitter_sleep = random.uniform(9.5, 11.0)
             time.sleep(jitter_sleep)
@@ -777,6 +760,7 @@ def monitor_and_manage_position(client, symbol, entry_price, tp_levels, is_long,
 def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels, is_long, instrument_rules, stop_loss_price):
     """
     Ustawia partial take profit zlecenia z pełną walidacją
+    Bot automatycznie dostosowuje ilość poziomów TP do dostępnej qty
     """
     min_order_qty = instrument_rules["minOrderQty"]
     min_notional = instrument_rules["minNotional"]
@@ -787,12 +771,12 @@ def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels
     print(colored(f"   Total Qty: {total_qty}", "cyan"), flush=True)
     print(colored(f"   Min Order Qty: {min_order_qty}", "cyan"), flush=True)
     print(colored(f"   Min Notional: {min_notional} USDT", "cyan"), flush=True)
-    print(colored(f"   Requested TP Levels: {len(tp_levels)}", "cyan"), flush=True)
+    print(colored(f"   Requested TP Levels: {len(tp_levels)} (adaptywny do kapitału)", "cyan"), flush=True)
     
     # Zaokrąglij total_qty do precyzji
     total_qty = round_to_precision(total_qty, qty_precision)
     
-    # Oblicz quantities z uwzględnieniem min_notional
+    # Oblicz quantities z uwzględnieniem min_notional (ADAPTYWNE!)
     quantities = calculate_partial_tp_quantities(
         total_qty, 
         tp_levels, 
@@ -865,7 +849,8 @@ def place_partial_take_profits(client, symbol, entry_price, total_qty, tp_levels
     else:
         print(colored(f"[{symbol}] ⚠️  Tylko SL aktywny (0/{actual_tp_count} TP)", "yellow", attrs=['bold']), flush=True)
     
-    return successful_orders
+    # Zwracamy ilość sukcesów ORAZ listę aktywnych TP dla monitora
+    return successful_orders, active_tp_levels
 
 # ==============================================================================
 # === GŁÓWNA PĘTLA BOTA ===
@@ -880,8 +865,8 @@ def run_legendx_strategy(config):
     print(colored(f"\n{'='*70}", "cyan"))
     print(colored(f"[{symbol}] Bot Legendx uruchomiony!", "green", attrs=['bold']))
     print(colored(f"[{symbol}] Interwał: {interval}m | MA: {config['ma_choice']} ({config['ma_period']}) | Ryzyko: {config['risk_percentage']}% | Leverage: {leverage}x", "cyan"))
-    print(colored(f"[{symbol}] TP Levels: {config['tp_levels']}", "cyan"))
-    print(colored(f"[{symbol}] Breakeven Buffer: {config.get('breakeven_buffer_perc', 0.5)}%", "cyan"))
+    print(colored(f"[{symbol}] TP Levels: {config['tp_levels']} (8 poziomów - adaptywne)", "cyan"))
+    print(colored(f"[{symbol}] Breakeven: STAŁY przy TP{config.get('breakeven_tp_trigger', 4)} (+{config.get('breakeven_buffer_perc', 0.5)}%) -> TERAZ DYNAMICZNY", "cyan"))
     print(colored(f"{'='*70}\n", "cyan"))
     
     leverage_set = False
@@ -1012,7 +997,8 @@ def run_legendx_strategy(config):
                                 client.cancel_all_orders(symbol)
                                 time.sleep(0.5)
                                 
-                                place_partial_take_profits(
+                                # Zwraca (successful_orders, active_tp_levels)
+                                successful_orders, active_tp_levels = place_partial_take_profits(
                                     client,
                                     symbol,
                                     entry_price,
@@ -1023,13 +1009,23 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
+                                # === DYNAMICZNY BREAKEVEN ===
+                                original_be_trigger_config = config.get('breakeven_tp_trigger', 4)
+                                actual_tp_count = len(active_tp_levels)
+                                # Użyj min(oryginalny_trigger, przedostatni_TP)
+                                # max(1, ...) zapewnia, że przy 1 TP triggerem jest TP1
+                                dynamic_be_trigger_level = min(original_be_trigger_config, max(1, actual_tp_count - 1))
+                                print(colored(f"[{symbol}] 🧠 Breakeven: Ustawiono {actual_tp_count} TP. Trigger BE ustawiony na TP{dynamic_be_trigger_level}", "magenta"), flush=True)
+                                # === KONIEC DYNAMICZNEGO BE ===
+                                
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, True, stop_loss_price, instrument_rules, config.get('breakeven_buffer_perc', 0.5))
+                                    # Przekazujemy przefiltrowaną listę TP i dynamiczny trigger
+                                    args=(client, symbol, entry_price, active_tp_levels, True, stop_loss_price, instrument_rules, config.get('breakeven_buffer_perc', 0.5), dynamic_be_trigger_level)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (dynamiczny trigger: TP{dynamic_be_trigger_level})", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "green"))
                             else:
@@ -1091,7 +1087,8 @@ def run_legendx_strategy(config):
                                 client.cancel_all_orders(symbol)
                                 time.sleep(0.5)
                                 
-                                place_partial_take_profits(
+                                # Zwraca (successful_orders, active_tp_levels)
+                                successful_orders, active_tp_levels = place_partial_take_profits(
                                     client,
                                     symbol,
                                     entry_price,
@@ -1102,13 +1099,23 @@ def run_legendx_strategy(config):
                                     stop_loss_price
                                 )
                                 
+                                # === DYNAMICZNY BREAKEVEN ===
+                                original_be_trigger_config = config.get('breakeven_tp_trigger', 4)
+                                actual_tp_count = len(active_tp_levels)
+                                # Użyj min(oryginalny_trigger, przedostatni_TP)
+                                # max(1, ...) zapewnia, że przy 1 TP triggerem jest TP1
+                                dynamic_be_trigger_level = min(original_be_trigger_config, max(1, actual_tp_count - 1))
+                                print(colored(f"[{symbol}] 🧠 Breakeven: Ustawiono {actual_tp_count} TP. Trigger BE ustawiony na TP{dynamic_be_trigger_level}", "magenta"), flush=True)
+                                # === KONIEC DYNAMICZNEGO BE ===
+                                
                                 monitor_thread = threading.Thread(
                                     target=monitor_and_manage_position,
-                                    args=(client, symbol, entry_price, tp_levels, False, stop_loss_price, instrument_rules, config.get('breakeven_buffer_perc', 0.5))
+                                    # Przekazujemy przefiltrowaną listę TP i dynamiczny trigger
+                                    args=(client, symbol, entry_price, active_tp_levels, False, stop_loss_price, instrument_rules, config.get('breakeka_buffer_perc', 0.5), dynamic_be_trigger_level)
                                 )
                                 monitor_thread.daemon = True
                                 monitor_thread.start()
-                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony", "cyan"), flush=True)
+                                print(colored(f"[{symbol}] 🔍 Monitoring breakeven uruchomiony (dynamiczny trigger: TP{dynamic_be_trigger_level})", "cyan"), flush=True)
                                 
                                 print(colored(f"{'='*70}\n", "red"))
                             else:
@@ -1144,7 +1151,7 @@ def print_banner():
     print(colored("    ███████╗███████╗╚██████╔╝███████╗██║ ╚████║██████╔╝██╔╝ ██╗", "cyan", attrs=['bold']))
     print(colored("    ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝", "cyan", attrs=['bold']))
     print(colored("="*70, "cyan"))
-    print(colored("    BYBIT BOT | 5TP + Breakeven 0.5% + Reverse + SL FIX", "white", attrs=['bold']))
+    print(colored("    BYBIT BOT | 8TP (Adaptive) + Dynamic Breakeven +0.5%", "white", attrs=['bold']))
     print(colored("="*70, "cyan"))
 
 def validate_config(config):
@@ -1166,7 +1173,7 @@ def validate_config(config):
 if __name__ == "__main__":
     print_banner()
     
-    if "TWOJ" in API_KEY or len(API_KEY) < 10:
+    if "TWOJ" in API_KEY:
         print(colored("\n⚠️  UWAGA: Nie ustawiono prawdziwych kluczy API!", "yellow", attrs=['bold']))
         print(colored("Edytuj plik i ustaw API_KEY oraz API_SECRET\n", "yellow"))
         print(colored("TESTUJ ZAWSZE NA TESTNET NAJPIERW!", "red", attrs=['bold']))
@@ -1185,9 +1192,9 @@ if __name__ == "__main__":
         print(f"  Interwał:      {config['interval']} minut")
         print(f"  MA Type:       {config['ma_choice']} ({config['ma_period']})")
         print(f"  Ryzyko:        {config['risk_percentage']}%")
-        print(f"  TP Levels:     {config['tp_levels']}")
+        print(f"  TP Levels:     {config['tp_levels']} (8 TP - adaptywne)")
         print(f"  Leverage:      {config.get('leverage', '20')}x")
-        print(f"  BE Buffer:     {config.get('breakeven_buffer_perc', 0.5)}%")
+        print(f"  Breakeven:     TP{config.get('breakeven_tp_trigger', 4)} (+{config.get('breakeven_buffer_perc', 0.5)}%) [DYNAMICZNY]")
     
     print(colored("\n" + "="*70, "cyan"))
     print(colored("🚀 Uruchamianie botów...", "green", attrs=['bold']))
