@@ -213,7 +213,7 @@ for config in BOT_CONFIGS:
 # Po trafieniu TP4, SL przesuwa się na entry + 0.5%
 # Daje ~1.6% marginesu na korekty
 for config in BOT_CONFIGS:
-    config['breakeven_buffer_perc'] = 0.5
+    config['breakeven_buffer_perc'] = 0.4
     config['breakeven_tp_trigger'] = 4  # Aktywuje się przy TP4 (index 3, ale pokazujemy jako TP4)
 # === KONIEC ===
 
