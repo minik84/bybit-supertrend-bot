@@ -10,8 +10,8 @@ import pytz
 import threading
 
 # === KONFIGURACJA GŁÓWNA ===
-API_KEY = "pk3pm3ytYQfYq8Kbku"
-API_SECRET = "0gLWHahoJ546CbTqozDVYHPiwwaKGIiljToR"
+API_KEY = "CxQFjz7JivQbTnihTP"  # ZMIEŃ NA SWÓJ KLUCZ
+API_SECRET = "zfliLpcpjbb2LeQLNjvQx8Twlm41ctR4ZUGq"  # ZMIEŃ NA SWÓJ SECRET
 BASE_URL = "https://api.bybit.com"
 
 # ==============================================================================
