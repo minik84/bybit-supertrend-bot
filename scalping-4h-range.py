@@ -32,27 +32,14 @@ BOT_CONFIGS = [
         "trade_interval": "5",
         "use_break_even": True,
         "use_smart_sl": False,
-        "sl_buffer_percentage": 0.055, # Bufor bezpieczeństwa dla SL
-
-        # ==============================================================================
-        # NOWA FUNKCJA: Inteligentne Zaokrąglanie Ryzyka
-        # ==============================================================================
+        "sl_buffer_percentage": 0.055, 
         
-        # 1. Bazowe ryzyko, którego bot będzie próbował użyć
+        # --- Inteligentne Zaokrąglanie Ryzyka ---
         "risk_percentage": 0.5,
-        
-        # 2. Maksymalne akceptowalne ryzyko, jeśli 'sufit' jest bliżej.
-        #    Bot zaokrągli ilość W GÓRĘ, tylko jeśli realne ryzyko
-        #    NIE PRZEKROCZY tej wartości.
-        #    (Ustaw równe 'risk_percentage', aby wyłączyć tę funkcję)
         "max_risk_tolerance_percentage": 0.75,
-        
-        # ==============================================================================
     },
 ]
 # ==============================================================================
-
-# === POZOSTAŁY KOD BOTA (BEZ ZMIAN W LOGICE, TYLKO PRZEŁĄCZNIK WYŻEJ) ===
 
 class BybitClient:
     def __init__(self, api_key, api_secret):
@@ -91,10 +78,18 @@ class BybitClient:
             response.raise_for_status()
             data = response.json()
             
-            if data.get("retCode") != 0:
+            # Kod 110043 (Set order stop loss/take profit failed, stop loss/take profit not modify) nie jest błędem krytycznym
+            if data.get("retCode") != 0 and data.get("retCode") != 110043:
                 print(colored(f"Błąd API Bybit ({endpoint}): {data.get('retMsg')} (retCode: {data.get('retCode')})", "red"), flush=True)
                 return None
             return data
+        except requests.exceptions.HTTPError as http_err:
+            # Specjalnie loguj błędy 404, aby je widzieć
+            if http_err.response.status_code == 404:
+                print(colored(f"BŁĄD 404 (Not Found): Sprawdź endpoint API. URL: {url}", "red", attrs=['bold']), flush=True)
+            else:
+                print(colored(f"Błąd HTTP: {http_err}", "red"), flush=True)
+            return None
         except requests.exceptions.RequestException as e:
             print(colored(f"Błąd połączenia: {e}", "red"), flush=True)
             return None
@@ -143,8 +138,10 @@ class BybitClient:
         data = self._send_request("GET", endpoint, params)
         
         if data and data.get("result", {}).get("list"):
+            # Znajdź pozycję, która jest otwarta (ma size > 0)
             for pos in data["result"]["list"]:
-                if pos['symbol'] == symbol and float(pos.get("size", 0)) > 0:
+                # Sprawdzamy 'size' i 'side', aby upewnić się, że to aktywna pozycja
+                if pos['symbol'] == symbol and float(pos.get("size", 0)) > 0 and pos.get("side") != "None":
                     return {
                         "size": float(pos["size"]), 
                         "entry_price": float(pos["avgPrice"]), 
@@ -153,19 +150,36 @@ class BybitClient:
         return None
         
     def modify_position_sl(self, symbol, stop_loss):
+        """Modyfikuje Stop Loss dla otwartej pozycji (na potrzeby Break-Even)."""
         if DRY_RUN: 
             print(colored(f"[{symbol}] SYMULACJA: Modyfikacja Stop Lossa na: {stop_loss}", "blue"), flush=True)
             return True
-            
-        endpoint = "/v5/position/set-trading-stop"
+        
+        # ==============================================================================
+        # POPRAWKA BŁĘDU 404: Używamy endpointu '/v5/position/trading-stop'
+        # ==============================================================================
+        endpoint = "/v5/position/trading-stop"
+        # ==============================================================================
+        
         params = {
             "category": "linear", 
             "symbol": symbol, 
-            "stopLoss": str(stop_loss)
+            "stopLoss": str(stop_loss),
+            "tpslMode": "Full", # Użyj "Full" dla pełnej pozycji
+            "positionIdx": 0 # Dla trybu One-Way
         }
         print(colored(f"[{symbol}] MODYFIKACJA SL: Ustawianie Stop Lossa na: {stop_loss}", "blue"), flush=True)
         data = self._send_request("POST", endpoint, params)
-        return data is not None
+        
+        # Sprawdź, czy API zwróciło sukces (0) lub błąd "not modify" (110043), który też jest OK
+        if data and (data.get('retCode') == 0 or data.get('retCode') == 110043):
+            return True
+        elif data:
+            print(colored(f"[{symbol}] BŁĄD MODYFIKACJI SL: {data.get('retMsg')}", "red"), flush=True)
+            return False
+        else:
+            # Błąd 404 lub inny błąd połączenia został już zalogowany przez _send_request
+            return False
 
     def get_instrument_info(self, symbol):
         endpoint = "/v5/market/instruments-info"
@@ -233,7 +247,8 @@ class BybitClient:
             "qty": str(qty), 
             "stopLoss": str(stop_loss), 
             "takeProfit": str(take_profit),
-            "tpslMode": "Full"
+            "tpslMode": "Full", # Ustawia SL/TP dla całej pozycji
+            "positionIdx": 0 # Dla trybu One-Way
         }
         data = self._send_request("POST", endpoint, params)
         return data is not None
@@ -352,7 +367,7 @@ def run_strategy(config):
                         trade_info = {
                             "side": position_data["side"], 
                             "entry_price": position_data["entry_price"], 
-                            "sl_moved_to_be": True
+                            "sl_moved_to_be": True # Zakładamy, że już jest zarządzana
                         }
                         state = "IN_POSITION"
 
@@ -393,7 +408,11 @@ def run_strategy(config):
                             print(colored(f"[{thread_name}] SYMULACJA: Take Profit zrealizowany.", "green"), flush=True)
                     
                     if is_closed:
-                        risk_amount_usd = virtual_balance * (config['risk_percentage'] / 100)
+                        # Znajdź bazowe ryzyko dla logowania
+                        base_risk_perc = config.get('risk_percentage', 1.0)
+                        risk_amount_usd = virtual_balance * (base_risk_perc / 100)
+                        
+                        # Oblicz realny zysk/stratę na podstawie R
                         profit_usd = risk_amount_usd * result_R
                         virtual_balance += profit_usd
                         
@@ -417,7 +436,8 @@ def run_strategy(config):
                                 trade_info["stop_loss"] = entry_price
                             print(colored(f"[{thread_name}] OSIĄGNIĘTO 1R: SL przesunięty na Break-Even ({entry_price}).", "cyan"), flush=True)
                         else:
-                            print(colored(f"[{thread_name}] BŁĄD: Nie udało się przesunąć SL na Break-Even.", "red"), flush=True)
+                            # Błąd został już zalogowany przez modify_position_sl
+                            print(colored(f"[{thread_name}] BŁĄD: Nie udało się przesunąć SL na Break-Even. Spróbuję ponownie.", "red"), flush=True)
                 
                 time.sleep(5)
                 continue
@@ -500,49 +520,38 @@ def run_strategy(config):
                             time.sleep(300)
                             continue
                         
-                        # ==============================================================================
-                        # NOWA LOGIKA: Inteligentne Zaokrąglanie Ilości
-                        # ==============================================================================
+                        # --- Logika Inteligentnego Zaokrąglania ---
                         
-                        # 1. Oblicz idealną ilość na podstawie BAZOWEGO ryzyka
-                        base_risk_amount_usd = balance * (config['risk_percentage'] / 100)
+                        base_risk_perc = config.get('risk_percentage', 1.0)
+                        base_risk_amount_usd = balance * (base_risk_perc / 100)
                         qty_by_risk = base_risk_amount_usd / stop_loss_distance_points
                         
-                        # Ogranicz przez maksymalny kapitał (dźwignię)
                         leverage = float(config['leverage'])
                         max_qty_by_balance = (balance * leverage * 0.95) / entry_price
                         final_qty_ideal = min(qty_by_risk, max_qty_by_balance)
 
-                        # 2. Oblicz 'floor' (podłogę) i 'ceiling' (sufit)
                         floor_qty = math.floor(final_qty_ideal / qty_step) * qty_step
                         ceiling_qty = math.ceil(final_qty_ideal / qty_step) * qty_step
 
-                        # 3. Sprawdź, czy 'ceiling' jest dozwolony
-                        
-                        # Pobierz maksymalną tolerancję (lub użyj bazowej, jeśli nie ustawiono)
-                        max_risk_tolerance_perc = config.get('max_risk_tolerance_percentage', config['risk_percentage'])
+                        max_risk_tolerance_perc = config.get('max_risk_tolerance_percentage', base_risk_perc)
                         max_risk_allowed_usd = balance * (max_risk_tolerance_perc / 100)
                         
-                        # Jakie ryzyko w USD podejmie 'ceiling_qty'?
                         risk_of_ceiling_qty_usd = ceiling_qty * stop_loss_distance_points
                         
                         adjusted_qty = 0.0
                         
-                        # Jeśli 'ceiling_qty' jest puste (np. 0.0), nie ma sensu sprawdzać
                         if ceiling_qty <= 0:
-                             adjusted_qty = floor_qty # Będzie 0.0
+                             adjusted_qty = floor_qty
                         
-                        # Sprawdź, czy ryzyko 'sufitu' mieści się w tolerancji
                         elif risk_of_ceiling_qty_usd <= max_risk_allowed_usd:
-                            # TAK: Możemy wziąć 'ceiling', mieści się w tolerancji
                             adjusted_qty = ceiling_qty
                             print(colored(f"[{thread_name}] Zaokrąglono ilość W GÓRĘ do {ceiling_qty} (Ryzyko: {risk_of_ceiling_qty_usd:.2f} USD <= Max: {max_risk_allowed_usd:.2f} USD)", "cyan"), flush=True)
                         else:
-                            # NIE: 'ceiling' jest zbyt ryzykowny, bierz bezpieczny 'floor'
                             adjusted_qty = floor_qty
-                            print(colored(f"[{thread_name}] Zaokrąglono ilość W DÓŁ do {floor_qty} (Ceiling był zbyt ryzykowny: {risk_of_ceiling_qty_usd:.2f} USD > Max: {max_risk_allowed_usd:.2f} USD)", "yellow"), flush=True)
+                            risk_of_floor_qty_usd = floor_qty * stop_loss_distance_points
+                            print(colored(f"[{thread_name}] Zaokrąglono ilość W DÓŁ do {floor_qty} (Ryzyko: {risk_of_floor_qty_usd:.2f} USD)", "yellow"), flush=True)
                         
-                        # ==============================================================================
+                        # --- Koniec Logiki ---
                         
                         if adjusted_qty >= instrument_rules['minOrderQty']:
                             final_qty_str = f"{adjusted_qty:.{get_precision_from_step(qty_step)}f}"
