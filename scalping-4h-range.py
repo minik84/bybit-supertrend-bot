@@ -36,7 +36,7 @@ BOT_CONFIGS = [
         
         # --- Inteligentne Zaokrąglanie Ryzyka ---
         "risk_percentage": 0.5,
-        "max_risk_tolerance_percentage": 0.75,
+        "max_risk_tolerance_percentage": 1,
     },
 ]
 # ==============================================================================
