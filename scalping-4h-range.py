@@ -26,27 +26,27 @@ DRY_RUN = False # ZMIEŃ NA FALSE DO PRAWDZIWEGO HANDLU
 BOT_CONFIGS = [
     {
         "symbol": "BTCUSDT",
-        "leverage": "10",           # Dźwignia (używana jako limit max. pozycji)
-        "risk_percentage": 0.5,     # Ryzyko na transakcję (np. 1.0 = 1% kapitału)
-        "tp_ratio": 2.0,            # Stosunek Take Profit do Stop Loss (np. 2.0 = 1:2 R:R)
-        "range_interval": "240",    # Interwał do wyznaczania zakresu (4h)
-        "trade_interval": "5",      # Interwał do szukania sygnału wejścia (5 min)
-        
-        # --- USTAWIENIA ZARZĄDZANIA POZYCJĄ ---
-        
-        # Przesuń SL na cenę wejścia (Break-Even) po osiągnięciu 1R
-        "use_break_even": True,     
-        
-        # Użyj bezpiecznego SL (ekstremum wybicia)
+        "leverage": "10",
+        "tp_ratio": 2.0,
+        "range_interval": "240",
+        "trade_interval": "5",
+        "use_break_even": True,
         "use_smart_sl": False,
+        "sl_buffer_percentage": 0.055, # Bufor bezpieczeństwa dla SL
 
         # ==============================================================================
-        # NOWA FUNKCJA: Bufor bezpieczeństwa dla Stop Lossa
-        # Dodaje procentowy bufor do SL, aby uniknąć polowania na płynność.
-        # Np. 0.05 = 0.05% ceny SL (np. 100,000$ * 0.0005 = 50$ bufora)
-        # Ustaw na 0.0, aby wyłączyć.
+        # NOWA FUNKCJA: Inteligentne Zaokrąglanie Ryzyka
         # ==============================================================================
-        "sl_buffer_percentage": 0.05,
+        
+        # 1. Bazowe ryzyko, którego bot będzie próbował użyć
+        "risk_percentage": 0.5,
+        
+        # 2. Maksymalne akceptowalne ryzyko, jeśli 'sufit' jest bliżej.
+        #    Bot zaokrągli ilość W GÓRĘ, tylko jeśli realne ryzyko
+        #    NIE PRZEKROCZY tej wartości.
+        #    (Ustaw równe 'risk_percentage', aby wyłączyć tę funkcję)
+        "max_risk_tolerance_percentage": 0.75,
+        
         # ==============================================================================
     },
 ]
@@ -254,9 +254,6 @@ def round_to_tick(value, tick_size):
 virtual_balance = 180.0
 
 def find_smart_sl_level(klines_5min, direction, extreme_price):
-    """
-    Funkcja 'Smart SL', która nie będzie używana, jeśli 'use_smart_sl' = False.
-    """
     relevant_klines = klines_5min[-40:]
     
     if direction == "DOWN":
@@ -460,17 +457,14 @@ def run_strategy(config):
                         side = "Sell" if breakout_direction == "UP" else "Buy"
                         entry_price = candle_close 
                         
-                        # === LOGIKA USTALANIA STOP LOSSA ===
                         stop_loss_base = breakout_extreme_price
                         
                         if config['use_smart_sl']:
-                            # Ta sekcja zostanie POMINIĘTA
                             stop_loss = find_smart_sl_level(klines_trade, breakout_direction, stop_loss_base)
                         else:
                             stop_loss = stop_loss_base
                             print(colored(f"[{thread_name}] Używam standardowego SL (ekstremum wybicia): {stop_loss}", "cyan"), flush=True)
                         
-                        # === NOWA LOGIKA: Dodawanie Bufora Bezpieczeństwa ===
                         if config.get('sl_buffer_percentage', 0.0) > 0:
                             buffer_amount = stop_loss * (config['sl_buffer_percentage'] / 100.0)
                             if side == "Buy":
@@ -479,7 +473,6 @@ def run_strategy(config):
                             else: # side == "Sell"
                                 stop_loss += buffer_amount
                                 print(colored(f"[{thread_name}] Dodano bufor {buffer_amount:.4f}. Nowy SL: {stop_loss}", "cyan"), flush=True)
-                        # ======================================================
 
                         tick_size = instrument_rules['tickSize']
                         qty_step = instrument_rules['qtyStep']
@@ -506,16 +499,50 @@ def run_strategy(config):
                             print(colored(f"[{thread_name}] Brak środków na koncie (Saldo: {balance}). Czekam.", "red"), flush=True)
                             time.sleep(300)
                             continue
-
-                        risk_amount_usd = balance * (config['risk_percentage'] / 100)
-                        qty_by_risk = risk_amount_usd / stop_loss_distance_points
                         
+                        # ==============================================================================
+                        # NOWA LOGIKA: Inteligentne Zaokrąglanie Ilości
+                        # ==============================================================================
+                        
+                        # 1. Oblicz idealną ilość na podstawie BAZOWEGO ryzyka
+                        base_risk_amount_usd = balance * (config['risk_percentage'] / 100)
+                        qty_by_risk = base_risk_amount_usd / stop_loss_distance_points
+                        
+                        # Ogranicz przez maksymalny kapitał (dźwignię)
                         leverage = float(config['leverage'])
                         max_qty_by_balance = (balance * leverage * 0.95) / entry_price
+                        final_qty_ideal = min(qty_by_risk, max_qty_by_balance)
+
+                        # 2. Oblicz 'floor' (podłogę) i 'ceiling' (sufit)
+                        floor_qty = math.floor(final_qty_ideal / qty_step) * qty_step
+                        ceiling_qty = math.ceil(final_qty_ideal / qty_step) * qty_step
+
+                        # 3. Sprawdź, czy 'ceiling' jest dozwolony
                         
-                        final_qty = min(qty_by_risk, max_qty_by_balance)
+                        # Pobierz maksymalną tolerancję (lub użyj bazowej, jeśli nie ustawiono)
+                        max_risk_tolerance_perc = config.get('max_risk_tolerance_percentage', config['risk_percentage'])
+                        max_risk_allowed_usd = balance * (max_risk_tolerance_perc / 100)
                         
-                        adjusted_qty = math.floor(final_qty / qty_step) * qty_step
+                        # Jakie ryzyko w USD podejmie 'ceiling_qty'?
+                        risk_of_ceiling_qty_usd = ceiling_qty * stop_loss_distance_points
+                        
+                        adjusted_qty = 0.0
+                        
+                        # Jeśli 'ceiling_qty' jest puste (np. 0.0), nie ma sensu sprawdzać
+                        if ceiling_qty <= 0:
+                             adjusted_qty = floor_qty # Będzie 0.0
+                        
+                        # Sprawdź, czy ryzyko 'sufitu' mieści się w tolerancji
+                        elif risk_of_ceiling_qty_usd <= max_risk_allowed_usd:
+                            # TAK: Możemy wziąć 'ceiling', mieści się w tolerancji
+                            adjusted_qty = ceiling_qty
+                            print(colored(f"[{thread_name}] Zaokrąglono ilość W GÓRĘ do {ceiling_qty} (Ryzyko: {risk_of_ceiling_qty_usd:.2f} USD <= Max: {max_risk_allowed_usd:.2f} USD)", "cyan"), flush=True)
+                        else:
+                            # NIE: 'ceiling' jest zbyt ryzykowny, bierz bezpieczny 'floor'
+                            adjusted_qty = floor_qty
+                            print(colored(f"[{thread_name}] Zaokrąglono ilość W DÓŁ do {floor_qty} (Ceiling był zbyt ryzykowny: {risk_of_ceiling_qty_usd:.2f} USD > Max: {max_risk_allowed_usd:.2f} USD)", "yellow"), flush=True)
+                        
+                        # ==============================================================================
                         
                         if adjusted_qty >= instrument_rules['minOrderQty']:
                             final_qty_str = f"{adjusted_qty:.{get_precision_from_step(qty_step)}f}"
