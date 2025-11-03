@@ -19,7 +19,7 @@ BASE_URL = "https://api.bybit.com"
 # True = Działanie 'na sucho', tylko logi, bez realnych zleceń.
 # False = Prawdziwy handel na giełdzie.
 # ==============================================================================
-DRY_RUN = True
+DRY_RUN = False
 # ==============================================================================
 
 # === KONFIGURACJA STRATEGII ===
