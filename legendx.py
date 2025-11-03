@@ -48,7 +48,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 13, "std_coeff_short": 1.3, "atr_period_short": 9, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.3, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "BTCUSDT_30m": {
@@ -57,7 +57,7 @@ PRESETS = {
         "ma_distance_perc_long": 2.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 12, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "ETHUSDT_30m": {
@@ -66,7 +66,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.0, "stop_loss_perc_long": 4.5,
         "std_period_short": 11, "std_coeff_short": 0.5, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     # ========== 15 MINUT ==========
@@ -77,7 +77,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.4,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "AUDIOUSDT_15m": {
@@ -86,7 +86,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.1, "stop_loss_perc_long": 4.5,
         "std_period_short": 7, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.0,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "BELUSDT_15m": {
@@ -95,7 +95,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.4, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "EGLDUSDT_15m": {
@@ -104,7 +104,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 2.0, "atr_period_short": 14, "atr_coeff_short": 2.4,
         "ma_distance_perc_short": 1.9, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "GRTUSDT_15m": {
@@ -113,7 +113,7 @@ PRESETS = {
         "ma_distance_perc_long": 2.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.3, "atr_period_short": 14, "atr_coeff_short": 1.3,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "NEARUSDT_15m": {
@@ -122,7 +122,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 1.2, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "ONEUSDT_15m": {
@@ -131,7 +131,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 10, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "10"
     },
     
     "RUNEUSDT_15m": {
@@ -140,7 +140,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.5, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.2,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "SANDUSDT_15m": {
@@ -149,7 +149,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.2, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 1.0, "atr_period_short": 14, "atr_coeff_short": 1.1,
         "ma_distance_perc_short": 1.0, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "XRPUSDT_15m": {
@@ -158,7 +158,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
     
     "YFIUSDT_15m": {
@@ -167,7 +167,7 @@ PRESETS = {
         "ma_distance_perc_long": 1.6, "stop_loss_perc_long": 4.5,
         "std_period_short": 14, "std_coeff_short": 0.8, "atr_period_short": 14, "atr_coeff_short": 1.5,
         "ma_distance_perc_short": 1.5, "stop_loss_perc_short": 4.5,
-        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 0.5, "renorm_coeff": 1.0, "leverage": "5"
+        "tp_levels": [2.0, 4.0, 8.0], "risk_percentage": 1.0, "renorm_coeff": 1.0, "leverage": "20"
     },
 }
 
@@ -213,7 +213,7 @@ for config in BOT_CONFIGS:
 # Po trafieniu TP4, SL przesuwa się na entry + 0.5%
 # Daje ~1.6% marginesu na korekty
 for config in BOT_CONFIGS:
-    config['breakeven_buffer_perc'] = 0.4
+    config['breakeven_buffer_perc'] = 0.5
     config['breakeven_tp_trigger'] = 4  # Aktywuje się przy TP4 (index 3, ale pokazujemy jako TP4)
 # === KONIEC ===
 
