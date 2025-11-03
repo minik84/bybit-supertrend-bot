@@ -38,7 +38,7 @@ BOT_CONFIGS = [
         "use_break_even": True,     
         
         # Użyj "hybrydowego" SL opartego o strukturę rynku (lepsze R:R)
-        "use_smart_sl": True,
+        "use_smart_sl": False,
     },
     # Możesz dodać tu inne pary, np. ETHUSDT, z tymi samymi ustawieniami
     # {
