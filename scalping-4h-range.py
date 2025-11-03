@@ -27,17 +27,7 @@ BOT_CONFIGS = [
    {
         "symbol": "BTCUSDT",
         "leverage": "10",
-        "risk_percentage": 0.75,
-        "tp_ratio": 2.0,
-        "range_interval": "240",
-        "trade_interval": "5",
-        "use_break_even": False,     # NOWA FUNKCJA: Przesuń SL na cenę wejścia przy 1:1 R:R
-        "use_smart_sl": False,      # NOWA FUNKCJA: Użyj ciaśniejszego SL opartego o strukturę rynku
-    },
-        {
-        "symbol": "ETHUSDT",
-        "leverage": "10",
-        "risk_percentage": 0.75,
+        "risk_percentage": 0.5,
         "tp_ratio": 2.0,
         "range_interval": "240",
         "trade_interval": "5",
