@@ -32,7 +32,7 @@ BOT_CONFIGS = [
         "trade_interval": "5",
         "use_break_even": True,
         "use_smart_sl": False,
-        "sl_buffer_percentage": 0.055, 
+        "sl_buffer_percentage": 0.075, 
         
         # --- Inteligentne Zaokrąglanie Ryzyka ---
         "risk_percentage": 0.5,
