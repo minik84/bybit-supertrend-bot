@@ -8,6 +8,7 @@ import math
 from termcolor import colored
 import pytz
 import threading
+import os
 
 # === KONFIGURACJA GŁÓWNA ===
 API_KEY = "CxQFjz7JivQbTnihTP"  # ZMIEŃ NA SWÓJ KLUCZ
@@ -28,11 +29,11 @@ BOT_CONFIGS = [
         "symbol": "BTCUSDT",
         "leverage": "10",
         "tp_ratio": 2.0,
-        "range_interval": "240",
+        "range_interval": "240",  # Nie używane już - będziemy używać świec 1h
         "trade_interval": "5",
         "use_break_even": True,
         "use_smart_sl": False,
-        "sl_buffer_percentage": 0.075, 
+        "sl_buffer_percentage": 0.055, 
         
         # --- Inteligentne Zaokrąglanie Ryzyka ---
         "risk_percentage": 0.5,
@@ -155,11 +156,7 @@ class BybitClient:
             print(colored(f"[{symbol}] SYMULACJA: Modyfikacja Stop Lossa na: {stop_loss}", "blue"), flush=True)
             return True
         
-        # ==============================================================================
-        # POPRAWKA BŁĘDU 404: Używamy endpointu '/v5/position/trading-stop'
-        # ==============================================================================
         endpoint = "/v5/position/trading-stop"
-        # ==============================================================================
         
         params = {
             "category": "linear", 
@@ -264,6 +261,63 @@ def get_precision_from_step(step):
 def round_to_tick(value, tick_size):
     return round(value / tick_size) * tick_size
 
+# --- Funkcje do persystencji stanu ---
+
+def save_range_state(symbol, range_high, range_low, last_range_date):
+    """Zapisuje stan range do pliku"""
+    state_file = f"{symbol}_range_state.json"
+    with open(state_file, 'w') as f:
+        json.dump({
+            'range_high': range_high,
+            'range_low': range_low,
+            'last_range_date': last_range_date
+        }, f)
+    print(colored(f"[{symbol}] Zapisano stan range do pliku", "cyan"), flush=True)
+
+def load_range_state(symbol):
+    """Wczytuje stan range z pliku"""
+    state_file = f"{symbol}_range_state.json"
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(colored(f"[{symbol}] Błąd wczytywania stanu: {e}", "yellow"), flush=True)
+    return None
+
+def get_ny_range_from_hourly_candles(client, symbol, now_ny, ny_timezone):
+    """
+    Pobiera range dla pierwszych 4 godzin dnia NY używając świec 1h.
+    Automatycznie obsługuje czas letni/zimowy.
+    """
+    
+    # Czekaj do 04:05 NY żeby mieć pewność że wszystkie świece są zamknięte
+    if now_ny.hour < 4 or (now_ny.hour == 4 and now_ny.minute < 5):
+        return None, None
+    
+    # Oblicz północ NY w czasie UTC
+    midnight_ny = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_utc = midnight_ny.astimezone(pytz.utc)
+    
+    # Pobierz 4 świece 1h (00:00-01:00, 01:00-02:00, 02:00-03:00, 03:00-04:00 czasu NY)
+    start_ms = int(midnight_utc.timestamp() * 1000)
+    
+    hour_klines = client.get_klines(symbol, "60", limit=4, start=start_ms)
+    
+    if len(hour_klines) >= 4:
+        range_high = max(float(k[2]) for k in hour_klines[:4])
+        range_low = min(float(k[3]) for k in hour_klines[:4])
+        
+        # Informacje debugowe - pokaż które świece UTC zostały użyte
+        utc_hours = [(midnight_utc.hour + i) % 24 for i in range(4)]
+        print(colored(f"[{symbol}] Używam świec UTC: {utc_hours[0]}:00-{utc_hours[3]+1}:00 "
+                     f"(odpowiada 00:00-04:00 NY)", "cyan"), flush=True)
+        
+        return range_high, range_low
+    
+    print(colored(f"[{symbol}] Błąd: Otrzymano tylko {len(hour_klines)} świec 1h", "red"), flush=True)
+    return None, None
+
 # --- Logika Strategii ---
 
 virtual_balance = 180.0
@@ -302,15 +356,34 @@ def run_strategy(config):
     else:
         print(colored(f"[{thread_name}] Bot '{symbol} Range Reversal' uruchomiony!", "green", attrs=['bold']), flush=True)
     
-    range_high, range_low, last_range_day, state = None, None, None, "AWAITING_RANGE"
-    breakout_direction, breakout_extreme_price = None, None
-    trade_info = {}
-    
     try:
         ny_timezone = pytz.timezone("America/New_York")
     except pytz.UnknownTimeZoneError:
         print(colored("BŁĄD: Nie można załadować strefy czasowej 'America/New_York'.", "red"), flush=True)
         return
+
+    # Inicjalizacja zmiennych
+    range_high, range_low = None, None
+    last_range_date = None  # Zmiana z last_range_day na last_range_date (pełna data)
+    state = "AWAITING_RANGE"
+    breakout_direction, breakout_extreme_price = None, None
+    trade_info = {}
+    
+    # Próba wczytania zapisanego stanu
+    saved_state = load_range_state(symbol)
+    if saved_state:
+        now_ny = datetime.datetime.now(ny_timezone)
+        saved_date = saved_state.get('last_range_date')
+        
+        # Sprawdź czy zapisany stan jest z dzisiejszego dnia
+        if saved_date == now_ny.strftime('%Y-%m-%d'):
+            range_high = saved_state['range_high']
+            range_low = saved_state['range_low']
+            last_range_date = saved_date
+            state = "AWAITING_BREAKOUT"
+            print(colored(f"[{thread_name}] Wczytano zapisany range z {saved_date}: HIGH={range_high}, LOW={range_low}", "green"), flush=True)
+        else:
+            print(colored(f"[{thread_name}] Zapisany range jest z {saved_date}, dziś jest {now_ny.strftime('%Y-%m-%d')}. Pobiorę nowy.", "yellow"), flush=True)
 
     instrument_rules = client.get_instrument_info(symbol)
     if not instrument_rules:
@@ -323,31 +396,34 @@ def run_strategy(config):
         try:
             now_utc = datetime.datetime.now(pytz.utc)
             now_ny = now_utc.astimezone(ny_timezone)
+            current_date_str = now_ny.strftime('%Y-%m-%d')
             
             # --- 1. Ustalanie Zakresu Dnia (Range) ---
-            if (now_ny.day != last_range_day or range_high is None) and not trade_info:
+            if (current_date_str != last_range_date or range_high is None) and not trade_info:
                 
-                if now_ny.hour < 4:
+                if now_ny.hour < 4 or (now_ny.hour == 4 and now_ny.minute < 5):
                     if state != "AWAITING_RANGE":
-                        print(f"[{thread_name}] Czekam na 04:00 NY, aby ustalić nowy zakres... (teraz: {now_ny.strftime('%H:%M')})", flush=True)
+                        print(f"[{thread_name}] Czekam na 04:05 NY, aby ustalić nowy zakres... (teraz: {now_ny.strftime('%H:%M')} NY)", flush=True)
                         state = "AWAITING_RANGE"
                     time.sleep(60)
                     continue
 
-                print(f"[{thread_name}] Pobieranie nowego zakresu na dzień {now_ny.strftime('%Y-%m-%d')}...", flush=True)
+                print(f"[{thread_name}] Pobieranie nowego zakresu na dzień {current_date_str}...", flush=True)
                 
-                start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
-                start_of_ny_day_utc_ms = int(start_of_ny_day.timestamp() * 1000)
+                # Używamy świec 1h dla dokładnego odwzorowania 00:00-04:00 NY
+                new_range_high, new_range_low = get_ny_range_from_hourly_candles(client, symbol, now_ny, ny_timezone)
                 
-                range_klines = client.get_klines(symbol, config['range_interval'], limit=1, start=start_of_ny_day_utc_ms)
-                
-                if range_klines:
-                    range_high, range_low = float(range_klines[0][2]), float(range_klines[0][3])
-                    last_range_day = now_ny.day
+                if new_range_high and new_range_low:
+                    range_high, range_low = new_range_high, new_range_low
+                    last_range_date = current_date_str
                     state = "AWAITING_BREAKOUT"
-                    print(colored(f"[{thread_name}] Nowy zakres ustalony: HIGH={range_high}, LOW={range_low}", "cyan"), flush=True)
+                    
+                    print(colored(f"[{thread_name}] Nowy zakres ustalony dla {current_date_str}: HIGH={range_high}, LOW={range_low}", "cyan", attrs=['bold']), flush=True)
+                    
+                    # Zapisz stan do pliku
+                    save_range_state(symbol, range_high, range_low, last_range_date)
                 else:
-                    print(colored(f"[{thread_name}] Nie udało się pobrać świecy zakresu. Spróbuję ponownie za 60s.", "red"), flush=True)
+                    print(colored(f"[{thread_name}] Nie udało się pobrać świec zakresu. Spróbuję ponownie za 60s.", "red"), flush=True)
                     time.sleep(60)
                     continue
             
