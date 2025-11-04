@@ -8,6 +8,7 @@ import math
 from termcolor import colored
 import pytz
 import threading
+import os # <-- Dodano
 
 # === KONFIGURACJA GŁÓWNA ===
 API_KEY = "CxQFjz7JivQbTnihTP"  # ZMIEŃ NA SWÓJ KLUCZ
@@ -32,7 +33,7 @@ BOT_CONFIGS = [
         "trade_interval": "5",
         "use_break_even": True,
         "use_smart_sl": False,
-        "sl_buffer_percentage": 0.055, 
+        "sl_buffer_percentage": 0.055,  
         
         # --- Inteligentne Zaokrąglanie Ryzyka ---
         "risk_percentage": 0.5,
@@ -264,6 +265,27 @@ def get_precision_from_step(step):
 def round_to_tick(value, tick_size):
     return round(value / tick_size) * tick_size
 
+# === NOWE FUNKCJE: Zapis/Odczyt Stanu ===
+def save_state(file_name, data):
+    """Zapisuje stan bota do pliku JSON."""
+    try:
+        with open(file_name, 'w') as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(colored(f"BŁĄD: Nie można zapisać stanu do pliku {file_name}: {e}", "red"), flush=True)
+
+def load_state(file_name):
+    """Wczytuje stan bota z pliku JSON."""
+    try:
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(colored(f"BŁĄD: Nie można wczytać stanu z pliku {file_name}: {e}", "red"), flush=True)
+    return {} # Zwróć pusty słownik, jeśli plik nie istnieje lub jest błąd
+# === Koniec nowych funkcji ===
+
+
 # --- Logika Strategii ---
 
 virtual_balance = 180.0
@@ -297,14 +319,42 @@ def run_strategy(config):
     symbol = config['symbol']
     thread_name = threading.current_thread().name
     
+    # === MODYFIKACJA: Nazwa pliku stanu ===
+    STATE_FILE = f"{symbol}_state.json"
+
+    # === MODYFIKACJA: Wczytanie stanu przy starcie ===
+    print(f"[{thread_name}] Wczytywanie stanu z pliku {STATE_FILE}...", flush=True)
+    loaded_state = load_state(STATE_FILE)
+    
+    range_high = loaded_state.get("range_high", None)
+    range_low = loaded_state.get("range_low", None)
+    last_range_day = loaded_state.get("last_range_day", None)
+    state = loaded_state.get("state", "AWAITING_RANGE")
+    breakout_direction = loaded_state.get("breakout_direction", None)
+    breakout_extreme_price = loaded_state.get("breakout_extreme_price", None)
+    trade_info = loaded_state.get("trade_info", {})
+    
+    # Mała poprawka - jeśli wczytaliśmy stan "w pozycji", ale pozycja jest pusta, zresetuj
+    if state == "IN_POSITION" and not trade_info:
+        print(f"[{thread_name}] Stan wczytany jako IN_POSITION, ale brak trade_info. Resetuję do AWAITING_BREAKOUT.", flush=True)
+        state = "AWAITING_BREAKOUT"
+        
+    def get_current_state_dict():
+        """Pomocnicza funkcja do zbierania aktualnego stanu."""
+        return {
+            "range_high": range_high,
+            "range_low": range_low,
+            "last_range_day": last_range_day,
+            "state": state,
+            "breakout_direction": breakout_direction,
+            "breakout_extreme_price": breakout_extreme_price,
+            "trade_info": trade_info
+        }
+    
     if DRY_RUN:
         print(colored(f"[{thread_name}] Bot uruchomiony w trybie SYMULACJI (PAPER TRADING)", "magenta", attrs=['bold']), flush=True)
     else:
         print(colored(f"[{thread_name}] Bot '{symbol} Range Reversal' uruchomiony!", "green", attrs=['bold']), flush=True)
-    
-    range_high, range_low, last_range_day, state = None, None, None, "AWAITING_RANGE"
-    breakout_direction, breakout_extreme_price = None, None
-    trade_info = {}
     
     try:
         ny_timezone = pytz.timezone("America/New_York")
@@ -319,6 +369,13 @@ def run_strategy(config):
     
     print(f"[{thread_name}] Zasady instrumentu: tickSize={instrument_rules['tickSize']}, qtyStep={instrument_rules['qtyStep']}", flush=True)
 
+    # === MODYFIKACJA: Pokaż wczytany stan ===
+    if range_high:
+        print(colored(f"[{thread_name}] Wczytano poprzedni zakres: HIGH={range_high}, LOW={range_low} (Dzień: {last_range_day})", "blue"), flush=True)
+    if trade_info:
+        print(colored(f"[{thread_name}] Wczytano aktywną pozycję: {trade_info.get('side')} @ {trade_info.get('entry_price')}", "blue"), flush=True)
+
+
     while True:
         try:
             now_utc = datetime.datetime.now(pytz.utc)
@@ -327,14 +384,19 @@ def run_strategy(config):
             # --- 1. Ustalanie Zakresu Dnia (Range) ---
             if (now_ny.day != last_range_day or range_high is None) and not trade_info:
                 
-                if now_ny.hour < 4:
+                # === MODYFIKACJA: Dodano 5-minutowy bufor ===
+                # Czekaj na 4:05 NY, aby dać giełdzie czas na korektę danych świecy
+                if now_ny.hour < 4 or (now_ny.hour == 4 and now_ny.minute < 5):
+                # === Koniec modyfikacji ===
                     if state != "AWAITING_RANGE":
-                        print(f"[{thread_name}] Czekam na 04:00 NY, aby ustalić nowy zakres... (teraz: {now_ny.strftime('%H:%M')})", flush=True)
+                        print(f"[{thread_name}] Czekam na 04:05 NY, aby ustalić nowy zakres... (teraz: {now_ny.strftime('%H:%M')})", flush=True)
                         state = "AWAITING_RANGE"
+                        # Zapisz zmianę stanu
+                        save_state(STATE_FILE, get_current_state_dict()) 
                     time.sleep(60)
                     continue
 
-                print(f"[{thread_name}] Pobieranie nowego zakresu na dzień {now_ny.strftime('%Y-%m-%d')}...", flush=True)
+                print(f"[{thread_name}] Pobieranie nowego zakresu na dzień {now_ny.strftime('%Y-%m-%d')} (o 04:05 NY)...", flush=True)
                 
                 start_of_ny_day = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_of_ny_day_utc_ms = int(start_of_ny_day.timestamp() * 1000)
@@ -346,6 +408,9 @@ def run_strategy(config):
                     last_range_day = now_ny.day
                     state = "AWAITING_BREAKOUT"
                     print(colored(f"[{thread_name}] Nowy zakres ustalony: HIGH={range_high}, LOW={range_low}", "cyan"), flush=True)
+                    
+                    # === MODYFIKACJA: Zapisz stan po ustaleniu zakresu ===
+                    save_state(STATE_FILE, get_current_state_dict())
                 else:
                     print(colored(f"[{thread_name}] Nie udało się pobrać świecy zakresu. Spróbuję ponownie za 60s.", "red"), flush=True)
                     time.sleep(60)
@@ -360,7 +425,10 @@ def run_strategy(config):
                         print(colored(f"[{thread_name}] Realna pozycja została zamknięta (SL/TP). Czekam na nowy sygnał.", "green"), flush=True)
                         trade_info = {}
                         state = "AWAITING_BREAKOUT"
+                        # === MODYFIKACJA: Zapisz pusty stan pozycji ===
+                        save_state(STATE_FILE, get_current_state_dict())
                 else:
+                    # Sprawdzanie, czy pozycja nie została otwarta ręcznie / przez inny system
                     position_data = client.get_position_info(symbol)
                     if position_data:
                         print(colored(f"[{thread_name}] Wykryto istniejącą pozycję po restarcie. Bot przejmuje zarządzanie (tylko BE).", "blue"), flush=True)
@@ -370,9 +438,14 @@ def run_strategy(config):
                             "sl_moved_to_be": True # Zakładamy, że już jest zarządzana
                         }
                         state = "IN_POSITION"
+                        # === MODYFIKACJA: Zapisz stan wykrytej pozycji ===
+                        save_state(STATE_FILE, get_current_state_dict())
 
             if trade_info:
-                if state != "IN_POSITION": state = "IN_POSITION"
+                if state != "IN_POSITION": 
+                    state = "IN_POSITION"
+                    # === MODYFIKACJA: Zapisz zmianę stanu ===
+                    save_state(STATE_FILE, get_current_state_dict())
                 
                 current_price = client.get_current_price(symbol)
                 if not current_price:
@@ -421,6 +494,8 @@ def run_strategy(config):
                         
                         trade_info = {}
                         state = "AWAITING_BREAKOUT"
+                        # === MODYFIKACJA: Zapisz pusty stan pozycji (DRY_RUN) ===
+                        save_state(STATE_FILE, get_current_state_dict())
                         continue
 
                 if config['use_break_even'] and not trade_info.get("sl_moved_to_be"):
@@ -435,6 +510,8 @@ def run_strategy(config):
                             if DRY_RUN:
                                 trade_info["stop_loss"] = entry_price
                             print(colored(f"[{thread_name}] OSIĄGNIĘTO 1R: SL przesunięty na Break-Even ({entry_price}).", "cyan"), flush=True)
+                            # === MODYFIKACJA: Zapisz stan po ruchu na BE ===
+                            save_state(STATE_FILE, get_current_state_dict())
                         else:
                             # Błąd został już zalogowany przez modify_position_sl
                             print(colored(f"[{thread_name}] BŁĄD: Nie udało się przesunąć SL na Break-Even. Spróbuję ponownie.", "red"), flush=True)
@@ -447,7 +524,7 @@ def run_strategy(config):
                 if range_high is None or range_low is None:
                     time.sleep(10)
                     continue
-                    
+                        
                 klines_trade = client.get_klines(symbol, config['trade_interval'], limit=50) 
                 
                 if len(klines_trade) < 20:
@@ -462,15 +539,29 @@ def run_strategy(config):
                     if candle_close > range_high:
                         print(f"[{thread_name}] Wykryto wybicie GÓRĄ. Czekam na powrót do zakresu.", flush=True)
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "UP", candle_high
+                        # === MODYFIKACJA: Zapisz zmianę stanu ===
+                        save_state(STATE_FILE, get_current_state_dict())
                     elif candle_close < range_low:
                         print(f"[{thread_name}] Wykryto wybicie DOŁEM. Czekam na powrót do zakresu.", flush=True)
                         state, breakout_direction, breakout_extreme_price = "AWAITING_REENTRY", "DOWN", candle_low
+                        # === MODYFIKACJA: Zapisz zmianę stanu ===
+                        save_state(STATE_FILE, get_current_state_dict())
                 
                 elif state == "AWAITING_REENTRY":
+                    
+                    # === MODYFIKACJA: Zapisuj nowe ekstremum, jeśli się zmieniło ===
+                    new_extreme_found = False
                     if breakout_direction == "UP" and candle_high > breakout_extreme_price:
                         breakout_extreme_price = candle_high
+                        new_extreme_found = True
                     elif breakout_direction == "DOWN" and candle_low < breakout_extreme_price:
                         breakout_extreme_price = candle_low
+                        new_extreme_found = True
+                    
+                    if new_extreme_found:
+                        # Zapisz stan tylko jeśli ekstremum się zaktualizowało
+                        save_state(STATE_FILE, get_current_state_dict())
+                    # === Koniec modyfikacji ===
 
                     if (breakout_direction == "UP" and candle_close < range_high) or (breakout_direction == "DOWN" and candle_close > range_low):
                         
@@ -502,12 +593,16 @@ def run_strategy(config):
                         if (side == "Buy" and entry_price <= stop_loss) or (side == "Sell" and entry_price >= stop_loss):
                             print(colored(f"[{thread_name}] Błąd logiki: Cena wejścia ({entry_price}) jest gorsza niż SL ({stop_loss}). Anulowanie.", "red"), flush=True)
                             state = "AWAITING_BREAKOUT"
+                            # === MODYFIKACJA: Zapisz zresetowany stan ===
+                            save_state(STATE_FILE, get_current_state_dict())
                             continue
 
                         stop_loss_distance_points = abs(entry_price - stop_loss)
                         if stop_loss_distance_points == 0:
                             print(colored(f"[{thread_name}] Błąd: Dystans SL = 0. Anulowanie wejścia.", "red"), flush=True)
                             state = "AWAITING_BREAKOUT"
+                            # === MODYFIKACJA: Zapisz zresetowany stan ===
+                            save_state(STATE_FILE, get_current_state_dict())
                             continue
                             
                         tp_distance = stop_loss_distance_points * config['tp_ratio']
@@ -541,7 +636,7 @@ def run_strategy(config):
                         adjusted_qty = 0.0
                         
                         if ceiling_qty <= 0:
-                             adjusted_qty = floor_qty
+                                adjusted_qty = floor_qty
                         
                         elif risk_of_ceiling_qty_usd <= max_risk_allowed_usd:
                             adjusted_qty = ceiling_qty
@@ -572,12 +667,18 @@ def run_strategy(config):
                                     "sl_moved_to_be": False
                                 }
                                 state = "IN_POSITION"
+                                # === MODYFIKACJA: Zapisz stan po wejściu w pozycję ===
+                                save_state(STATE_FILE, get_current_state_dict())
                             else:
                                 print(colored(f"[{thread_name}] Nie udało się złożyć zlecenia (Błąd API?). Resetowanie.", "red"), flush=True)
                                 state = "AWAITING_BREAKOUT"
+                                # === MODYFIKACJA: Zapisz zresetowany stan ===
+                                save_state(STATE_FILE, get_current_state_dict())
                         else:
                             print(colored(f"[{thread_name}] Obliczona ilość ({adjusted_qty}) jest mniejsza niż minimalna ({instrument_rules['minOrderQty']}). Anulowanie wejścia.", "yellow"), flush=True)
                             state = "AWAITING_BREAKOUT"
+                            # === MODYFIKACJA: Zapisz zresetowany stan ===
+                            save_state(STATE_FILE, get_current_state_dict())
 
             if not trade_info:
                 if state in ["AWAITING_BREAKOUT", "AWAITING_REENTRY"]:
@@ -602,7 +703,7 @@ if __name__ == "__main__":
     if DRY_RUN:
         print(colored(f"Uruchamianie w trybie SYMULACJI. Saldo startowe: {virtual_balance} USDT", "magenta", attrs=['bold']), flush=True)
     else:
-         print(colored(f"Uruchamianie w trybie REALNYM. Upewnij się, że masz środki na koncie UNIFIED.", "green", attrs=['bold']), flush=True)
+        print(colored(f"Uruchamianie w trybie REALNYM. Upewnij się, że masz środki na koncie UNIFIED.", "green", attrs=['bold']), flush=True)
 
     threads = []
     for i, config in enumerate(BOT_CONFIGS):
